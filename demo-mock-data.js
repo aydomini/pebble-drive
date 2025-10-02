@@ -17,7 +17,7 @@ window.DEMO_DATA = {
             size: 524288,
             type: 'image/png',
             uploadDate: new Date('2024-10-01T11:30:00').toISOString(),
-            downloadUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+            downloadUrl: '#'
         },
         {
             id: 'demo-3',
@@ -103,7 +103,13 @@ function uploadFile(file) {
     svgContent: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="200" height="200">
   <circle cx="50" cy="50" r="40" fill="#3B82F6"/>
   <text x="50" y="60" text-anchor="middle" fill="white" font-size="40" font-family="Arial">PD</text>
-</svg>`
+</svg>`,
+
+    // 模拟 PNG 图片数据（一个简单的蓝色方块）
+    pngDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAAACXBIWXMAAAsTAAALEwEAmpwYAAADjklEQVR4nO3cQY7bMBBFQY3h+1/Z3ngRwIbiWOJUvVoL/kKdj5ZIUVJKS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSy+2Z/oAl+3b9AGuemz6ANd9mz7Ade+mD3Dd4/QB7juY+ri36QNc9zZ9gOt+TB/guv3pA1z3bfoA9x1MfdzbxQO8TR/gum/TB7juMH2A6w6mPu5t+gDXvU0f4Lpv0we47mD6ANcdTH3c2/QBrns3fYDrHtMHuO4wfYDrDqY+7m36ANe9TR/gum/TB7juMH2A6w6mPu5t+gDXvU0f4Lpv0we47jB9gOsOpj7ubfoA171NH+C6x/QBrjtMH+C6g6mPe5s+wHVv0we47jF9gOsO0we47mDq496mD3Dd2/QBrvs+fYDrDtMHuO5g6uPepg9w3dv0Aa77MX2A6w7TB7juYOrj3qYPcN3b9AGuO0wf4LqDqY97mz7AdW/TB7jux/QBrjtMH+C6g6mPe5s+wHVv0we47jF9gOsO0we47mDq496mD3Dd2/QBrvs5fYDrDtMHuO5g6uPepg9w3dv0Aa77NX2A6w7TB7juYOrj3qYPcN3b9AGuO0wf4LqDqY97mz7AdW/TB7ju9/QBrjtMH+C6g6mPe5s+wHVv0we47s/0Aa47TB/guoOpj3ubPsB1b9MHuO7P9AGuO0wf4LqDqY97mz7AdW/TB7juz/QBrjtMH+C6g6mPe5s+wHVv0we47u/0Aa47TB/guoOpj3ubPsB1b9MHuO7v9AGuO0wf4LqDqY97mz7AdW/TB7ju3/QBrjtMH+C6g6mPe5s+wHVv0we47t/0Aa47TB/guoOpj3ubPsB1b9MHuO7f9AGuO0wf4LqDqY97mz7AdW/TB7ju//QBrjtMH+C6g6mPe5s+wHVv0we47v/0Aa47TB/guoOpj3ubPsB1b9MHuO7/9AGuO0wf4LqDqY97mz7AdW/TB7jux/QBrjtMH+C6g6mPe5s+wHVv0we47sf0Aa47TB/guoOpj3ubPsB1b9MHuO4wfYDrDqY+7m36ANe9TR/gusP0Aa47mPq4t+kDXPc2fYDrDtMHuO5g6uPepg9w3dv0Aa47TB/guoOpj3ubPsB1b9MHuO4wfYDrDqY+7m36ANe9TR/gusP0Aa47mPq4t+kDXPc2fYDrDtMHuO5g6uPe/gNRfL1QvCbsvAAAAABJRU5ErkJggg==',
+
+    // 模拟 PDF 文档 URL（使用公开的测试 PDF）
+    pdfUrl: 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf'
 };
 
 // 模拟 API 调用
@@ -142,6 +148,10 @@ window.DEMO_API = {
                 return Promise.resolve(window.DEMO_DATA.jsCode);
             } else if (file.name === 'logo.svg') {
                 return Promise.resolve(window.DEMO_DATA.svgContent);
+            } else if (file.name === 'project-demo.png') {
+                return Promise.resolve(window.DEMO_DATA.pngDataUrl);
+            } else if (file.name === 'document.pdf') {
+                return Promise.resolve(window.DEMO_DATA.pdfUrl);
             }
         }
         return Promise.reject(new Error('File not found'));
