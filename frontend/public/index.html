@@ -4,6 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PebbleDrive - 轻量级云存储</title>
+    <script>
+        // 隐藏 Vite 开发服务器的连接日志
+        (function() {
+            const originalLog = console.log;
+            console.log = function(...args) {
+                // 过滤掉 Vite 的连接消息
+                const message = args[0];
+                if (typeof message === 'string' && (
+                    message.includes('[vite] connecting') ||
+                    message.includes('[vite] connected')
+                )) {
+                    return; // 不输出
+                }
+                originalLog.apply(console, args);
+            };
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         // Tailwind CDN 配置
@@ -217,14 +234,14 @@
                             <div class="px-4 py-2 bg-white dark:bg-gray-800 flex-shrink-0">
                                 <div class="flex items-center gap-2">
                                     <input type="text" id="searchInput" placeholder="搜索..." data-i18n-placeholder="searchPlaceholder"
-                                           class="flex-1 min-w-0 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400">
-                                    <select id="sortBy" class="flex-shrink-0 px-2 py-1.5 border border-gray-300 dark:border-gray-600 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100">
+                                           class="flex-1 min-w-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs leading-tight focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 h-[26px]">
+                                    <select id="sortBy" class="flex-shrink-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs leading-tight focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100 h-[26px]">
                                         <option value="name" data-i18n="sortByName">名称</option>
                                         <option value="size" data-i18n="sortBySize">大小</option>
                                         <option value="date" data-i18n="sortByDate">日期</option>
                                     </select>
-                                    <button id="refreshBtn" class="px-2 py-1.5 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition" data-i18n-title="refresh" title="刷新文件列表">
-                                        <i class="fas fa-sync-alt text-xs"></i>
+                                    <button id="refreshBtn" class="flex-shrink-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs leading-tight bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 transition h-[26px]">
+                                        <i class="fas fa-sync-alt"></i>
                                     </button>
                                 </div>
                             </div>
