@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PebbleDrive Demo - 轻量级云存储演示</title>
+    <title>PebbleDrive - 轻量级云存储</title>
     <script>
         // 隐藏 Vite 开发服务器的连接日志
         (function() {
@@ -35,10 +35,6 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-
-    <!-- Demo 模式模拟数据 -->
-    <script src="demo-mock-data.js"></script>
-
     <style>
         /* 夜间主题变量 */
         :root {
@@ -123,18 +119,6 @@
     </style>
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 min-h-screen flex flex-col transition-colors">
-    <!-- Demo 横幅提示 -->
-    <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 text-center shadow-lg">
-        <div class="max-w-7xl mx-auto flex items-center justify-center flex-wrap gap-2 text-sm">
-            <i class="fas fa-info-circle"></i>
-            <span><strong>🎭 演示模式 Demo Mode</strong> - 纯前端展示，使用模拟数据 | Frontend demo with mock data</span>
-            <span class="text-yellow-200">💡 登录密码：任意密码均可 | Login: Any password works</span>
-            <a href="https://github.com/aydomini/pebble-drive" target="_blank" class="underline hover:text-blue-200 transition-colors">
-                <i class="fab fa-github mr-1"></i>查看源码 View Source →
-            </a>
-        </div>
-    </div>
-
     <!-- 登录界面（默认显示） -->
     <div id="loginScreen" class="flex-1 flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md transition-colors">
@@ -311,10 +295,10 @@
     <!-- 文件操作模态框 -->
     <div id="fileModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
         <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white rounded-lg max-w-md w-full p-6">
+            <div class="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
                 <div class="flex items-center justify-between mb-4">
-                    <h3 id="modalTitle" class="text-lg font-semibold">文件信息</h3>
-                    <button id="closeModal" class="text-gray-400 hover:text-gray-600">
+                    <h3 id="modalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">文件信息</h3>
+                    <button id="closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -336,8 +320,8 @@
         // API base URL - 通过环境变量注入或使用默认值
         // 生产环境：需要在构建时设置 VITE_API_BASE_URL 环境变量
         // 开发环境：使用 vite.config.js 中配置的代理
-        window.ENV_API_BASE_URL = '';
+        window.ENV_API_BASE_URL = '%VITE_API_BASE_URL%';
     </script>
-    <script src="app.js"></script>
+    <script src="js/app.js"></script>
 </body>
 </html>
