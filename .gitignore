@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json  # 注释掉，允许提交以支持 npm ci
 
 # Build output
 dist/
