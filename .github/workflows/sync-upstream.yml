@@ -1,0 +1,123 @@
+name: Sync Upstream (同步上游仓库)
+
+# 用户可以手动触发同步，或设置定时同步
+on:
+  # 手动触发
+  workflow_dispatch:
+
+  # 可选：每周自动同步（取消注释以启用）
+  # schedule:
+  #   - cron: '0 0 * * 0'  # 每周日 00:00 UTC
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    name: 同步上游仓库更新
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0  # 获取完整历史
+
+    - name: 配置 Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: 添加上游仓库
+      run: |
+        # 检查是否已添加上游仓库
+        if ! git remote | grep -q upstream; then
+          # 尝试从 GitHub API 自动获取父仓库（Fork 的源仓库）
+          REPO="${{ github.repository }}"
+          PARENT_REPO=$(gh api repos/$REPO --jq '.parent.full_name' 2>/dev/null || echo "")
+
+          if [ -n "$PARENT_REPO" ]; then
+            git remote add upstream https://github.com/$PARENT_REPO.git
+            echo "✅ 自动检测并添加上游仓库: $PARENT_REPO"
+          else
+            echo "::error::❌ 无法自动检测上游仓库"
+            echo "::error::这可能不是一个 Fork 的仓库，或者无法访问父仓库信息"
+            echo "::error::请手动编辑 .github/workflows/sync-upstream.yml 第 34 行，添加上游仓库地址"
+            echo "::error::例如: git remote add upstream https://github.com/original-owner/PebbleDrive.git"
+            exit 1
+          fi
+        else
+          echo "ℹ️  上游仓库已存在"
+        fi
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 获取上游更新
+      run: |
+        echo "📥 正在获取上游仓库更新..."
+        git fetch upstream
+
+    - name: 检查冲突并合并
+      id: merge
+      run: |
+        # 获取当前分支
+        CURRENT_BRANCH=$(git branch --show-current)
+        echo "当前分支: $CURRENT_BRANCH"
+
+        # 尝试合并上游的 main 分支
+        echo "🔄 正在合并上游 main 分支..."
+
+        if git merge upstream/main --no-edit; then
+          echo "✅ 合并成功！"
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+        else
+          # 检查是否有冲突
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "⚠️  检测到合并冲突！"
+            echo "冲突文件："
+            git diff --name-only --diff-filter=U
+
+            # 取消合并
+            git merge --abort
+
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+
+            echo "::warning::合并失败：检测到冲突，请手动解决。运行以下命令："
+            echo "::warning::git fetch upstream"
+            echo "::warning::git merge upstream/main"
+          else
+            echo "ℹ️  已是最新版本，无需更新"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+        fi
+
+    - name: 推送更新
+      if: steps.merge.outputs.has_changes == 'true'
+      run: |
+        echo "📤 正在推送更新到 Fork 仓库..."
+        git push origin $(git branch --show-current)
+        echo "✅ 同步完成！"
+
+    - name: 冲突处理提示
+      if: steps.merge.outputs.has_conflicts == 'true'
+      run: |
+        echo "::error::❌ 自动同步失败：检测到冲突"
+        echo ""
+        echo "📝 手动解决步骤："
+        echo "1. 克隆你的 Fork 仓库"
+        echo "2. 添加上游仓库："
+        echo "   git remote add upstream https://github.com/ORIGINAL-OWNER/PebbleDrive.git"
+        echo "3. 获取上游更新："
+        echo "   git fetch upstream"
+        echo "4. 合并并解决冲突："
+        echo "   git merge upstream/main"
+        echo "5. 解决冲突后推送："
+        echo "   git push origin main"
+        exit 1
+
+    - name: 同步完成通知
+      if: steps.merge.outputs.has_changes == 'true'
+      run: |
+        echo "🎉 同步成功！"
+        echo ""
+        echo "📋 更新日志："
+        git log --oneline HEAD~5..HEAD

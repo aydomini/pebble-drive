@@ -1,0 +1,24 @@
+{
+  "name": "pebbledrive-backend",
+  "version": "1.0.0",
+  "description": "PebbleDrive 后端API - Cloudflare Workers",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:local": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "db:init": "wrangler d1 execute pebble-drive-db --file=./migrations/schema.sql",
+    "db:migrate": "wrangler d1 migrations apply pebble-drive-db --remote",
+    "db:local": "wrangler d1 execute pebble-drive-db --local --file=./migrations/schema.sql"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "api",
+    "serverless"
+  ],
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

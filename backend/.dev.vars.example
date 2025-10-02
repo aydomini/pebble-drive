@@ -1,0 +1,12 @@
+# 本地开发环境变量示例
+# 复制此文件为 .dev.vars 并填入你的值
+
+# 登录密码（本地开发用）
+AUTH_PASSWORD=your-local-password
+
+# JWT 密钥（本地开发用）
+AUTH_TOKEN_SECRET=your-local-secret-key
+
+# 注意：
+# - .dev.vars 文件已在 .gitignore 中，不会被提交
+# - 生产环境使用 wrangler secret put 命令设置

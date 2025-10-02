@@ -1,0 +1,52 @@
+🎉 Initial Release: PebbleDrive v1.0
+
+A modern, lightweight cloud storage solution powered by Cloudflare Workers
+
+## ✨ Features
+
+### Core Capabilities
+- 🚀 Serverless architecture with global edge deployment
+- 📦 Dual storage system (R2 + D1) with smart quota management
+- 📤 Drag-and-drop multi-file upload (up to 100MB per file)
+- 🔗 Advanced sharing with password protection, expiration, and download limits
+- 👁️ Rich file preview support (images, PDF, Markdown, 40+ code languages, SVG)
+- 🌍 Multi-language UI (Chinese/English)
+- 🌓 Dark mode with adaptive theme switching
+- 📱 Responsive design for desktop and mobile
+
+### Technical Stack
+- **Frontend**: Vite + Vanilla JavaScript + TailwindCSS
+- **Backend**: Cloudflare Workers + R2 + D1
+- **Deployment**: GitHub Actions + Wrangler CLI
+- **Free Tier**: 100% free deployment on Cloudflare
+
+### Architecture
+```
+User → Cloudflare Pages → Workers → R2 (Files) + D1 (Metadata)
+```
+
+## 📦 What's Included
+
+- Complete backend API with authentication
+- Modern responsive frontend interface
+- Automated deployment workflows (GitHub Actions)
+- One-click deployment script
+- Comprehensive documentation (English + Chinese)
+- Example configurations for easy setup
+
+## 🚀 Quick Start
+
+Three deployment options available:
+1. GitHub Actions auto-deploy (recommended for forks)
+2. One-click deployment script
+3. Manual deployment with full control
+
+See README.md for detailed instructions.
+
+## 📄 License
+
+MIT License
+
+---
+
+Built with ❤️ using Cloudflare Workers
