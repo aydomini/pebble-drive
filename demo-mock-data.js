@@ -99,14 +99,24 @@ function uploadFile(file) {
     });
 }`,
 
-    // 模拟 SVG 内容
-    svgContent: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="200" height="200">
-  <circle cx="50" cy="50" r="40" fill="#3B82F6"/>
-  <text x="50" y="60" text-anchor="middle" fill="white" font-size="40" font-family="Arial">PD</text>
+    // 模拟 SVG 内容（更明显的图形 - 蓝色圆圈 + PD 文字 + 边框）
+    svgContent: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- 背景 -->
+  <rect width="200" height="200" fill="#f0f9ff"/>
+  <!-- 外边框 -->
+  <rect x="10" y="10" width="180" height="180" fill="none" stroke="#3b82f6" stroke-width="3"/>
+  <!-- 蓝色圆圈 -->
+  <circle cx="100" cy="100" r="60" fill="#3b82f6"/>
+  <!-- 内圆 -->
+  <circle cx="100" cy="100" r="45" fill="#60a5fa"/>
+  <!-- 文字 PD -->
+  <text x="100" y="120" text-anchor="middle" fill="white" font-size="50" font-family="Arial, sans-serif" font-weight="bold">PD</text>
+  <!-- 副标题 -->
+  <text x="100" y="185" text-anchor="middle" fill="#3b82f6" font-size="14" font-family="Arial, sans-serif">PebbleDrive Demo</text>
 </svg>`,
 
-    // 模拟 PNG 图片数据（一个简单的蓝色方块）
-    pngDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAADICAYAAACtWK6eAAAACXBIWXMAAAsTAAALEwEAmpwYAAADjklEQVR4nO3cQY7bMBBFQY3h+1/Z3ngRwIbiWOJUvVoL/kKdj5ZIUVJKS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSy+2Z/oAl+3b9AGuemz6ANd9mz7Ade+mD3Dd4/QB7juY+ri36QNc9zZ9gOt+TB/guv3pA1z3bfoA9x1MfdzbxQO8TR/gum/TB7juMH2A6w6mPu5t+gDXvU0f4Lpv0we47mD6ANcdTH3c2/QBrns3fYDrHtMHuO4wfYDrDqY+7m36ANe9TR/gum/TB7juMH2A6w6mPu5t+gDXvU0f4Lpv0we47jB9gOsOpj7ubfoA171NH+C6x/QBrjtMH+C6g6mPe5s+wHVv0we47jF9gOsO0we47mDq496mD3Dd2/QBrvs+fYDrDtMHuO5g6uPepg9w3dv0Aa77MX2A6w7TB7juYOrj3qYPcN3b9AGuO0wf4LqDqY97mz7AdW/TB7jux/QBrjtMH+C6g6mPe5s+wHVv0we47jF9gOsO0we47mDq496mD3Dd2/QBrvs5fYDrDtMHuO5g6uPepg9w3dv0Aa77NX2A6w7TB7juYOrj3qYPcN3b9AGuO0wf4LqDqY97mz7AdW/TB7ju9/QBrjtMH+C6g6mPe5s+wHVv0we47s/0Aa47TB/guoOpj3ubPsB1b9MHuO7P9AGuO0wf4LqDqY97mz7AdW/TB7juz/QBrjtMH+C6g6mPe5s+wHVv0we47u/0Aa47TB/guoOpj3ubPsB1b9MHuO7v9AGuO0wf4LqDqY97mz7AdW/TB7ju3/QBrjtMH+C6g6mPe5s+wHVv0we47t/0Aa47TB/guoOpj3ubPsB1b9MHuO7f9AGuO0wf4LqDqY97mz7AdW/TB7ju//QBrjtMH+C6g6mPe5s+wHVv0we47v/0Aa47TB/guoOpj3ubPsB1b9MHuO7/9AGuO0wf4LqDqY97mz7AdW/TB7jux/QBrjtMH+C6g6mPe5s+wHVv0we47sf0Aa47TB/guoOpj3ubPsB1b9MHuO4wfYDrDqY+7m36ANe9TR/gusP0Aa47mPq4t+kDXPc2fYDrDtMHuO5g6uPepg9w3dv0Aa47TB/guoOpj3ubPsB1b9MHuO4wfYDrDqY+7m36ANe9TR/gusP0Aa47mPq4t+kDXPc2fYDrDtMHuO5g6uPe/gNRfL1QvCbsvAAAAABJRU5ErkJggg==',
+    // 模拟 PNG 图片数据（彩色渐变方块，更明显）
+    pngDataUrl: `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect width='200' height='200' fill='%233b82f6'/%3E%3Ctext x='100' y='90' text-anchor='middle' fill='white' font-size='24' font-family='Arial' font-weight='bold'%3EDEMO PNG%3C/text%3E%3Ctext x='100' y='120' text-anchor='middle' fill='white' font-size='16' font-family='Arial'%3EPebbleDrive%3C/text%3E%3Ctext x='100' y='145' text-anchor='middle' fill='white' font-size='14' font-family='Arial'%3ETest Image%3C/text%3E%3C/svg%3E`,
 
     // 模拟 PDF 文档 URL（使用公开的测试 PDF）
     pdfUrl: 'https://raw.githubusercontent.com/mozilla/pdf.js/ba2edeae/web/compressed.tracemonkey-pldi-09.pdf'
