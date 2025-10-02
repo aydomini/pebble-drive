@@ -333,10 +333,14 @@
     </div><!-- 关闭 appScreen -->
 
     <script>
+        // 启用 Demo 模式
+        window.DEMO_MODE = true;
+
         // API base URL - Demo 模式不需要真实的 API 端点
         // fetch 请求会被 app.js 中的拦截器捕获，返回模拟数据
         window.ENV_API_BASE_URL = '';
     </script>
-    <script src="js/app.js"></script>
+    <script src="demo-mock-data.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
