@@ -49,14 +49,52 @@ if (DEMO_MODE) {
         if (url.includes('/api/download')) {
             const fileId = new URL(url, location.origin).searchParams.get('id');
             return window.DEMO_API.download(fileId)
-                .then(content => {
-                    // 直接返回内容，让 getAuthenticatedBlobUrl() 处理
+                .then(async content => {
+                    // 根据内容类型返回不同的响应
+
+                    // 1. data URL (PNG/SVG data URL) - 直接返回文本
+                    if (typeof content === 'string' && content.startsWith('data:')) {
+                        return {
+                            ok: true,
+                            status: 200,
+                            text: () => Promise.resolve(content),
+                            json: () => Promise.resolve({ content }),
+                            blob: () => Promise.resolve(new Blob([content]))
+                        };
+                    }
+
+                    // 2. 外部 URL (PDF) - 需要先获取内容
+                    if (typeof content === 'string' && (content.startsWith('http://') || content.startsWith('https://'))) {
+                        try {
+                            const externalResponse = await originalFetch(content);
+                            const blob = await externalResponse.blob();
+                            return {
+                                ok: true,
+                                status: 200,
+                                text: () => blob.text(),
+                                json: () => Promise.resolve({ content }),
+                                blob: () => Promise.resolve(blob)
+                            };
+                        } catch (error) {
+                            console.error('Failed to fetch external URL:', error);
+                            return {
+                                ok: false,
+                                status: 500,
+                                text: () => Promise.resolve('Failed to fetch PDF'),
+                                json: () => Promise.resolve({ error: 'Failed to fetch PDF' }),
+                                blob: () => Promise.resolve(new Blob(['Failed to fetch PDF']))
+                            };
+                        }
+                    }
+
+                    // 3. 文本内容 (SVG源码、Markdown、JS) - 创建文本 blob
+                    const blob = new Blob([content], { type: 'text/plain' });
                     return {
                         ok: true,
                         status: 200,
                         text: () => Promise.resolve(content),
                         json: () => Promise.resolve({ content }),
-                        blob: () => Promise.resolve(new Blob([content]))
+                        blob: () => Promise.resolve(blob)
                     };
                 })
                 .catch(error => ({
@@ -749,29 +787,22 @@ class PebbleDrive {
                 throw new Error('下载失败');
             }
 
-            // 在 demo 模式下，先尝试获取文本内容
+            // 先尝试获取文本内容
             const text = await response.text();
 
-            // 如果是 data URL (PNG/SVG data URL)，直接返回
+            // 如果是 data URL，直接返回（可用于 img/iframe src）
             if (text.startsWith('data:')) {
                 return text;
             }
 
-            // 如果是外部 URL (PDF)，需要先获取内容再创建 blob URL
-            if (text.startsWith('http://') || text.startsWith('https://')) {
-                try {
-                    const pdfResponse = await fetch(text);
-                    const pdfBlob = await pdfResponse.blob();
-                    return URL.createObjectURL(pdfBlob);
-                } catch (error) {
-                    console.error('Failed to fetch external URL:', error);
-                    // 如果获取失败，直接返回 URL（可能会自动下载）
-                    return text;
+            // 否则，获取 blob 并创建 URL
+            // 重新发起请求获取 blob（因为已经读取过 text 了）
+            const blobResponse = await fetch(`${this.apiEndpoint}/download?id=${fileId}`, {
+                headers: {
+                    ...this.auth.getAuthHeaders()
                 }
-            }
-
-            // 否则是文本内容 (SVG源码、Markdown、JS 等)，创建 blob URL
-            const blob = new Blob([text], { type: 'text/plain' });
+            });
+            const blob = await blobResponse.blob();
             return URL.createObjectURL(blob);
         } catch (error) {
             console.error('Get blob URL error:', error);
