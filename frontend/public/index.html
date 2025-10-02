@@ -320,7 +320,7 @@
         // API base URL - 通过环境变量注入或使用默认值
         // 生产环境：需要在构建时设置 VITE_API_BASE_URL 环境变量
         // 开发环境：使用 vite.config.js 中配置的代理
-        window.ENV_API_BASE_URL = '';
+        window.ENV_API_BASE_URL = '%VITE_API_BASE_URL%';
     </script>
     <script src="js/app.js"></script>
 </body>
