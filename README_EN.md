@@ -1,6 +1,6 @@
 # 🌟 PebbleDrive - Lightweight Cloud Storage
 
-[中文](README.md) | **English**
+[中文](README.md) | **English** | **[🎭 Live Demo](https://aydomini.github.io/pebble-drive/demo.html)**
 
 > Modern cloud storage solution powered by Cloudflare Workers + R2 + D1
 >
@@ -8,6 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange.svg)](https://workers.cloudflare.com/)
+[![Demo](https://img.shields.io/badge/demo-online-brightgreen.svg)](https://aydomini.github.io/pebble-drive/demo.html)
 
 ---
 
