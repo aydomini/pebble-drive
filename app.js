@@ -11,25 +11,37 @@ if (DEMO_MODE) {
     window.fetch = function(url, options) {
         // 登录请求
         if (url.includes('/api/login')) {
+            const data = window.DEMO_API.login();
             return Promise.resolve({
                 ok: true,
-                json: () => Promise.resolve(window.DEMO_API.login())
+                status: 200,
+                json: () => Promise.resolve(data),
+                text: () => Promise.resolve(JSON.stringify(data)),
+                blob: () => Promise.resolve(new Blob([JSON.stringify(data)]))
             });
         }
 
         // 获取文件列表
         if (url.includes('/api/files')) {
+            const data = window.DEMO_API.getFiles();
             return Promise.resolve({
                 ok: true,
-                json: () => Promise.resolve(window.DEMO_API.getFiles())
+                status: 200,
+                json: () => Promise.resolve(data),
+                text: () => Promise.resolve(JSON.stringify(data)),
+                blob: () => Promise.resolve(new Blob([JSON.stringify(data)]))
             });
         }
 
         // 获取存储信息
         if (url.includes('/api/storage/quota')) {
+            const data = window.DEMO_API.getStorage();
             return Promise.resolve({
                 ok: true,
-                json: () => Promise.resolve(window.DEMO_API.getStorage())
+                status: 200,
+                json: () => Promise.resolve(data),
+                text: () => Promise.resolve(JSON.stringify(data)),
+                blob: () => Promise.resolve(new Blob([JSON.stringify(data)]))
             });
         }
 
@@ -39,23 +51,32 @@ if (DEMO_MODE) {
             return window.DEMO_API.download(fileId)
                 .then(content => ({
                     ok: true,
+                    status: 200,
                     text: () => Promise.resolve(content),
+                    json: () => Promise.resolve({ content }),
                     blob: () => Promise.resolve(new Blob([content]))
                 }))
                 .catch(error => ({
                     ok: false,
-                    json: () => Promise.resolve({ error: error.message })
+                    status: 404,
+                    json: () => Promise.resolve({ error: error.message }),
+                    text: () => Promise.resolve(JSON.stringify({ error: error.message })),
+                    blob: () => Promise.resolve(new Blob([JSON.stringify({ error: error.message })]))
                 }));
         }
 
         // 上传/删除/分享 - 返回错误
         if (url.includes('/api/upload') || url.includes('/api/delete') || url.includes('/api/share')) {
+            const data = {
+                error: 'This feature is disabled in demo mode',
+                message: 'Demo 模式不支持此功能'
+            };
             return Promise.resolve({
                 ok: false,
-                json: () => Promise.resolve({
-                    error: 'This feature is disabled in demo mode',
-                    message: 'Demo 模式不支持此功能'
-                })
+                status: 403,
+                json: () => Promise.resolve(data),
+                text: () => Promise.resolve(JSON.stringify(data)),
+                blob: () => Promise.resolve(new Blob([JSON.stringify(data)]))
             });
         }
 
