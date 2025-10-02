@@ -59,7 +59,7 @@ if (DEMO_MODE) {
                             status: 200,
                             text: () => Promise.resolve(content),
                             json: () => Promise.resolve({ content }),
-                            blob: () => Promise.resolve(new Blob([content]))
+                            blob: () => Promise.resolve(new Blob([content], { type: 'text/plain' }))
                         };
                     }
 
@@ -68,12 +68,14 @@ if (DEMO_MODE) {
                         try {
                             const externalResponse = await originalFetch(content);
                             const blob = await externalResponse.blob();
+                            // 确保 blob 有正确的 MIME 类型
+                            const pdfBlob = new Blob([blob], { type: 'application/pdf' });
                             return {
                                 ok: true,
                                 status: 200,
-                                text: () => blob.text(),
+                                text: () => pdfBlob.text(),
                                 json: () => Promise.resolve({ content }),
-                                blob: () => Promise.resolve(blob)
+                                blob: () => Promise.resolve(pdfBlob)
                             };
                         } catch (error) {
                             console.error('Failed to fetch external URL:', error);
@@ -82,13 +84,13 @@ if (DEMO_MODE) {
                                 status: 500,
                                 text: () => Promise.resolve('Failed to fetch PDF'),
                                 json: () => Promise.resolve({ error: 'Failed to fetch PDF' }),
-                                blob: () => Promise.resolve(new Blob(['Failed to fetch PDF']))
+                                blob: () => Promise.resolve(new Blob(['Failed to fetch PDF'], { type: 'text/plain' }))
                             };
                         }
                     }
 
-                    // 3. 文本内容 (SVG源码、Markdown、JS) - 创建文本 blob
-                    const blob = new Blob([content], { type: 'text/plain' });
+                    // 3. 文本内容 (SVG源码、Markdown、JS) - 使用正确的 MIME 类型
+                    const blob = new Blob([content], { type: 'image/svg+xml' });
                     return {
                         ok: true,
                         status: 200,
@@ -102,7 +104,7 @@ if (DEMO_MODE) {
                     status: 404,
                     json: () => Promise.resolve({ error: error.message }),
                     text: () => Promise.resolve(JSON.stringify({ error: error.message })),
-                    blob: () => Promise.resolve(new Blob([JSON.stringify({ error: error.message })]))
+                    blob: () => Promise.resolve(new Blob([JSON.stringify({ error: error.message })], { type: 'text/plain' }))
                 }));
         }
 
