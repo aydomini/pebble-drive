@@ -244,7 +244,12 @@ function getPasswordPage(shareToken) {
                     if (contentDisposition) {
                         const matches = /filename="?([^"]+)"?/.exec(contentDisposition);
                         if (matches && matches[1]) {
-                            filename = matches[1];
+                            // 解码URL编码的文件名
+                            try {
+                                filename = decodeURIComponent(matches[1]);
+                            } catch (e) {
+                                filename = matches[1]; // 解码失败则使用原始值
+                            }
                         }
                     }
 

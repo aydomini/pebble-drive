@@ -1426,7 +1426,7 @@ class PebbleDrive {
                     <div>
                         <label class="flex items-center space-x-2 cursor-pointer">
                             <input type="checkbox" id="shareEnableLimit" class="rounded">
-                            <span class="text-sm text-gray-700">${this.i18n.t('limitDownloads')}</span>
+                            <span class="text-sm text-gray-700 dark:text-gray-300">${this.i18n.t('limitDownloads')}</span>
                         </label>
                         <div id="shareLimitOptions" class="mt-2 ml-6 hidden">
                             <input type="number" id="shareLimitInput" min="1" max="100" value="10"
@@ -1438,7 +1438,7 @@ class PebbleDrive {
                     <div>
                         <label class="flex items-center space-x-2 cursor-pointer">
                             <input type="checkbox" id="shareEnablePassword" class="rounded">
-                            <span class="text-sm text-gray-700">${this.i18n.t('setPassword')}</span>
+                            <span class="text-sm text-gray-700 dark:text-gray-300">${this.i18n.t('setPassword')}</span>
                         </label>
                         <div id="sharePasswordOptions" class="mt-2 ml-6 hidden">
                             <input type="password" id="sharePasswordInput"
@@ -1448,13 +1448,13 @@ class PebbleDrive {
                     </div>
                 </div>
 
-                <div class="flex space-x-3 pt-4 border-t">
+                <div class="flex space-x-3 pt-4 border-t dark:border-gray-600">
                     <button onclick="app.createAdvancedShare('${file.id}')"
                             class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
                         <i class="fas fa-share mr-2"></i>${this.i18n.t('generateShareLink')}
                     </button>
                     <button onclick="app.hideModal()"
-                            class="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50">
+                            class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 dark:bg-gray-700 dark:text-gray-100">
                         ${this.i18n.t('cancel')}
                     </button>
                 </div>
