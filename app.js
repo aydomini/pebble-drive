@@ -49,38 +49,14 @@ if (DEMO_MODE) {
         if (url.includes('/api/download')) {
             const fileId = new URL(url, location.origin).searchParams.get('id');
             return window.DEMO_API.download(fileId)
-                .then(async content => {
-                    // 处理不同类型的内容
-                    let blob;
-
-                    // 如果是 data URL (PNG base64)
-                    if (typeof content === 'string' && content.startsWith('data:')) {
-                        // 将 data URL 转换为 blob
-                        const response = await originalFetch(content);
-                        blob = await response.blob();
-                    }
-                    // 如果是外部 URL (PDF)
-                    else if (typeof content === 'string' && (content.startsWith('http://') || content.startsWith('https://'))) {
-                        // 直接返回 URL，让浏览器处理
-                        return {
-                            ok: true,
-                            status: 200,
-                            text: () => Promise.resolve(content),
-                            json: () => Promise.resolve({ url: content }),
-                            blob: () => originalFetch(content).then(r => r.blob())
-                        };
-                    }
-                    // 文本内容 (Markdown, JS, SVG 源码)
-                    else {
-                        blob = new Blob([content], { type: 'text/plain' });
-                    }
-
+                .then(content => {
+                    // 直接返回内容，让 getAuthenticatedBlobUrl() 处理
                     return {
                         ok: true,
                         status: 200,
                         text: () => Promise.resolve(content),
                         json: () => Promise.resolve({ content }),
-                        blob: () => Promise.resolve(blob)
+                        blob: () => Promise.resolve(new Blob([content]))
                     };
                 })
                 .catch(error => ({
@@ -773,7 +749,21 @@ class PebbleDrive {
                 throw new Error('下载失败');
             }
 
-            const blob = await response.blob();
+            // 在 demo 模式下，先尝试获取文本内容
+            const text = await response.text();
+
+            // 如果是 data URL (PNG base64)，直接返回
+            if (text.startsWith('data:')) {
+                return text;
+            }
+
+            // 如果是外部 URL (PDF)，直接返回
+            if (text.startsWith('http://') || text.startsWith('https://')) {
+                return text;
+            }
+
+            // 否则是二进制数据或文本内容，创建 blob URL
+            const blob = new Blob([text]);
             return URL.createObjectURL(blob);
         } catch (error) {
             console.error('Get blob URL error:', error);
