@@ -614,6 +614,28 @@ class PebbleDrive {
         searchInput.addEventListener('input', this.debounce(this.filterFiles.bind(this), 300));
         sortBy.addEventListener('change', this.sortFiles.bind(this));
 
+        // 文件列表容器点击事件 - 使用事件委托处理文件选择和取消预览
+        const fileList = document.getElementById('fileList');
+        if (fileList) {
+            fileList.addEventListener('click', (e) => {
+                // 检查是否点击了文件项或其子元素
+                const fileItem = e.target.closest('.file-item');
+
+                if (fileItem) {
+                    // 点击了文件项 - 选择文件或取消选择
+                    const fileId = fileItem.getAttribute('data-file-id');
+                    this.selectFile(fileId);
+                } else {
+                    // 点击了空白处 - 取消选择
+                    if (this.selectedFileId) {
+                        this.selectedFileId = null;
+                        this.clearPreview();
+                        this.updateFileHighlight();
+                    }
+                }
+            });
+        }
+
         // 模态框
         closeModal.addEventListener('click', () => this.hideModal());
         fileModal.addEventListener('click', (e) => {
@@ -712,13 +734,14 @@ class PebbleDrive {
         files.forEach(file => {
             const progressItem = document.createElement('div');
             progressItem.className = 'bg-blue-50 dark:bg-gray-700 rounded p-1.5 mb-1';
+            progressItem.setAttribute('data-file-upload', file.name);
             progressItem.innerHTML = `
                 <div class="flex items-center justify-between mb-0.5">
                     <span class="text-[10px] font-medium text-gray-700 dark:text-gray-200 truncate flex-1">${file.name}</span>
                     <span class="text-[9px] text-gray-500 dark:text-gray-400 ml-1">${this.formatFileSize(file.size)}</span>
                 </div>
                 <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1">
-                    <div class="progress-bar bg-blue-600 dark:bg-blue-500 h-1 rounded-full transition-all" style="width: 0%"></div>
+                    <div class="progress-bar bg-blue-600 dark:bg-blue-500 h-1 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
             `;
             progressList.appendChild(progressItem);
@@ -729,30 +752,71 @@ class PebbleDrive {
         const formData = new FormData();
         formData.append('file', file);
 
-        try {
-            // 调用 API 上传文件
-            const response = await fetch(`${this.apiEndpoint}/upload`, {
-                method: 'POST',
-                headers: {
-                    ...this.auth.getAuthHeaders()
-                },
-                body: formData
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+
+            // 监听上传进度
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    // 找到对应文件的进度条
+                    const progressItem = document.querySelector(`[data-file-upload="${file.name}"]`);
+                    if (progressItem) {
+                        const progressBar = progressItem.querySelector('.progress-bar');
+                        if (progressBar) {
+                            progressBar.style.width = percent + '%';
+                        }
+                    }
+                }
             });
 
-            if (!response.ok) {
-                throw new Error(this.i18n.t('uploadFailed'));
+            // 上传完成
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const fileInfo = JSON.parse(xhr.responseText);
+                        this.files.push(fileInfo);
+                        this.showToast(`${file.name} ${this.i18n.t('uploadSuccess')}`, 'success');
+                        this.renderFileList();
+                        this.updateStorageInfo();
+                        resolve(fileInfo);
+                    } catch (error) {
+                        console.error('Parse response error:', error);
+                        this.showToast(`${this.i18n.t('uploadFailed')}: ${error.message}`, 'error');
+                        reject(error);
+                    }
+                } else {
+                    const errorMsg = this.i18n.t('uploadFailed');
+                    this.showToast(`${file.name} ${errorMsg}`, 'error');
+                    reject(new Error(errorMsg));
+                }
+            });
+
+            // 上传失败
+            xhr.addEventListener('error', () => {
+                const errorMsg = this.i18n.t('uploadFailed');
+                console.error('Upload error:', file.name);
+                this.showToast(`${file.name} ${errorMsg}`, 'error');
+                reject(new Error(errorMsg));
+            });
+
+            // 上传取消
+            xhr.addEventListener('abort', () => {
+                const errorMsg = this.i18n.t('uploadCanceled') || '上传已取消';
+                this.showToast(`${file.name} ${errorMsg}`, 'warning');
+                reject(new Error(errorMsg));
+            });
+
+            xhr.open('POST', `${this.apiEndpoint}/upload`);
+
+            // 添加认证头
+            const authHeaders = this.auth.getAuthHeaders();
+            if (authHeaders.Authorization) {
+                xhr.setRequestHeader('Authorization', authHeaders.Authorization);
             }
 
-            const fileInfo = await response.json();
-            this.files.push(fileInfo);
-            this.showToast(`${file.name} ${this.i18n.t('uploadSuccess')}`, 'success');
-            this.renderFileList();
-            this.updateStorageInfo();
-
-        } catch (error) {
-            console.error('Upload error:', error);
-            this.showToast(`${this.i18n.t('uploadFailed')}: ${error.message}`, 'error');
-        }
+            xhr.send(formData);
+        });
     }
 
     async loadFiles() {
@@ -790,8 +854,7 @@ class PebbleDrive {
 
         fileList.innerHTML = this.files.map(file => `
             <div class="file-item px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 transition-colors ${this.selectedFileId === file.id ? 'bg-blue-100 dark:bg-gray-700' : ''}"
-                 data-file-id="${file.id}"
-                 onclick="app.selectFile('${file.id}')">
+                 data-file-id="${file.id}">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-3 flex-1 min-w-0">
                         <i class="fas ${this.getFileIcon(file.type)} text-xl ${this.getFileIconColor(file.type)} flex-shrink-0"></i>
@@ -823,12 +886,32 @@ class PebbleDrive {
         if (this.selectedFileId === fileId) {
             this.selectedFileId = null;
             this.clearPreview();
-            this.renderFileList(); // 重新渲染以更新高亮状态
+            this.updateFileHighlight();
         } else {
             // 选中新文件
             this.selectedFileId = fileId;
             this.showFilePreview(fileId);
-            this.renderFileList(); // 重新渲染以更新高亮状态
+            this.updateFileHighlight();
+        }
+    }
+
+    // 更新文件列表中的高亮状态（不重新渲染整个列表）
+    updateFileHighlight() {
+        const fileList = document.getElementById('fileList');
+        if (!fileList) return;
+
+        // 移除所有文件项的高亮
+        const allItems = fileList.querySelectorAll('.file-item');
+        allItems.forEach(item => {
+            item.classList.remove('bg-blue-100', 'dark:bg-gray-700');
+        });
+
+        // 添加当前选中文件的高亮
+        if (this.selectedFileId) {
+            const selectedItem = fileList.querySelector(`[data-file-id="${this.selectedFileId}"]`);
+            if (selectedItem) {
+                selectedItem.classList.add('bg-blue-100', 'dark:bg-gray-700');
+            }
         }
     }
 
@@ -836,11 +919,10 @@ class PebbleDrive {
         const previewArea = document.getElementById('previewArea');
         if (previewArea) {
             previewArea.innerHTML = `
-                <div class="flex items-center justify-center h-full text-gray-400">
-                    <div class="text-center">
-                        <i class="fas fa-file text-6xl mb-4"></i>
-                        <p class="text-sm">选择文件以预览</p>
-                    </div>
+                <div class="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
+                    <i class="fas fa-file-alt text-4xl mb-3"></i>
+                    <p class="text-sm">${this.i18n.t('selectFileToPreview')}</p>
+                    <p class="text-xs mt-1">${this.i18n.t('supportedFormats')}</p>
                 </div>
             `;
         }
@@ -1344,7 +1426,7 @@ class PebbleDrive {
                     <div>
                         <label class="flex items-center space-x-2 cursor-pointer">
                             <input type="checkbox" id="shareEnableLimit" class="rounded">
-                            <span class="text-sm text-gray-700">${this.i18n.t('limitDownloads')}</span>
+                            <span class="text-sm text-gray-700 dark:text-gray-300">${this.i18n.t('limitDownloads')}</span>
                         </label>
                         <div id="shareLimitOptions" class="mt-2 ml-6 hidden">
                             <input type="number" id="shareLimitInput" min="1" max="100" value="10"
@@ -1356,7 +1438,7 @@ class PebbleDrive {
                     <div>
                         <label class="flex items-center space-x-2 cursor-pointer">
                             <input type="checkbox" id="shareEnablePassword" class="rounded">
-                            <span class="text-sm text-gray-700">${this.i18n.t('setPassword')}</span>
+                            <span class="text-sm text-gray-700 dark:text-gray-300">${this.i18n.t('setPassword')}</span>
                         </label>
                         <div id="sharePasswordOptions" class="mt-2 ml-6 hidden">
                             <input type="password" id="sharePasswordInput"
@@ -1366,13 +1448,13 @@ class PebbleDrive {
                     </div>
                 </div>
 
-                <div class="flex space-x-3 pt-4 border-t">
+                <div class="flex space-x-3 pt-4 border-t dark:border-gray-600">
                     <button onclick="app.createAdvancedShare('${file.id}')"
                             class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
                         <i class="fas fa-share mr-2"></i>${this.i18n.t('generateShareLink')}
                     </button>
                     <button onclick="app.hideModal()"
-                            class="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50">
+                            class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 dark:bg-gray-700 dark:text-gray-100">
                         ${this.i18n.t('cancel')}
                     </button>
                 </div>

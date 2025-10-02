@@ -1,6 +1,6 @@
 # 🌟 PebbleDrive - Lightweight Cloud Storage
 
-[中文](README.md) | **English**
+[中文](README.md) | **English** | **[🎭 Live Demo](https://aydomini.github.io/pebble-drive/)**
 
 > Modern cloud storage solution powered by Cloudflare Workers + R2 + D1
 >
@@ -8,6 +8,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange.svg)](https://workers.cloudflare.com/)
+[![Demo](https://img.shields.io/badge/demo-online-brightgreen.svg)](https://aydomini.github.io/pebble-drive/)
 
 ---
 
@@ -145,6 +146,79 @@ npx wrangler pages deploy dist --project-name=pebble-drive
 
 ---
 
+## 🔄 Database Migration
+
+### 📌 Important Notice
+
+**🎉 New Users - No Migration Needed!**
+
+If you're deploying for the first time (following "Quick Start" above with `schema.sql`), your database already contains all required table structures. You can use all features directly.
+
+---
+
+### ⚠️ For Existing Users Only: If deployed before 2025-10-02
+
+**Symptoms**:
+- ✅ Basic sharing works fine
+- ❌ Advanced sharing (password/expiry/download limit) fails with error: `Failed to create share link`
+
+**Cause**: Old `shares` table missing columns required for advanced sharing features.
+
+**Solution**:
+
+```bash
+# Method 1: Auto-migration (Recommended)
+cd backend
+wrangler d1 execute pebble-drive-db --file=./migrations/migrate_shares.sql --remote
+
+# Method 2: Manual column addition
+wrangler d1 execute pebble-drive-db --remote --command "
+ALTER TABLE shares ADD COLUMN password TEXT;
+ALTER TABLE shares ADD COLUMN downloadLimit INTEGER;
+ALTER TABLE shares ADD COLUMN downloadCount INTEGER DEFAULT 0;
+"
+
+# Method 3: Rebuild table (if Method 2 fails)
+# Create migration file
+cat > /tmp/migrate_shares.sql << 'EOF'
+CREATE TABLE shares_new (
+    token TEXT PRIMARY KEY,
+    fileId TEXT NOT NULL,
+    password TEXT,
+    downloadLimit INTEGER,
+    downloadCount INTEGER DEFAULT 0,
+    createdAt TEXT NOT NULL,
+    expiresAt TEXT,
+    FOREIGN KEY (fileId) REFERENCES files(id) ON DELETE CASCADE
+);
+
+INSERT INTO shares_new (token, fileId, createdAt, expiresAt, password, downloadLimit, downloadCount)
+SELECT token, fileId, createdAt, expiresAt, password, downloadLimit, downloadCount FROM shares;
+
+DROP TABLE shares;
+ALTER TABLE shares_new RENAME TO shares;
+
+CREATE INDEX IF NOT EXISTS idx_shares_fileId ON shares(fileId);
+CREATE INDEX IF NOT EXISTS idx_shares_expiresAt ON shares(expiresAt);
+EOF
+
+# Execute migration
+wrangler d1 execute pebble-drive-db --file=/tmp/migrate_shares.sql --remote
+```
+
+**Verify migration success**:
+```bash
+wrangler d1 execute pebble-drive-db --remote --command "PRAGMA table_info(shares);"
+# Should see 7 columns: token, fileId, password, downloadLimit, downloadCount, createdAt, expiresAt
+```
+
+**After migration**:
+- ✅ All existing share links remain valid
+- ✅ Can create password-protected shares
+- ✅ Can set expiry time and download limits
+
+---
+
 ## 🔧 Configuration
 
 ### Environment Variables
@@ -243,7 +317,24 @@ Pay-as-you-go pricing beyond free tier, extremely low cost.
 </details>
 
 <details>
-<summary><b>Q2: How to change file size limit?</b></summary>
+<summary><b>Q2: Share link creation failed - what to do?</b></summary>
+
+**Error message**: `Failed to create share link` or `table shares has no column named password`
+
+**Cause**: Database table structure is outdated, missing columns for advanced sharing features.
+
+**Solution**: Execute database migration (see "🔄 Database Migration" section above)
+
+```bash
+cd backend
+wrangler d1 execute pebble-drive-db --file=./migrations/migrate_shares.sql --remote
+```
+
+No redeployment needed after migration. Existing share links remain valid.
+</details>
+
+<details>
+<summary><b>Q3: How to change file size limit?</b></summary>
 
 Edit `frontend/public/js/app.js`:
 ```javascript
@@ -252,7 +343,7 @@ const validFiles = files.filter(file => file.size <= 200 * 1024 * 1024); // Chan
 </details>
 
 <details>
-<summary><b>Q3: What file types support preview?</b></summary>
+<summary><b>Q4: What file types support preview?</b></summary>
 
 - **Images**: JPG, PNG, GIF, WebP, SVG
 - **Documents**: PDF, Markdown
@@ -261,7 +352,7 @@ const validFiles = files.filter(file => file.size <= 200 * 1024 * 1024); // Chan
 </details>
 
 <details>
-<summary><b>Q4: How to change login password?</b></summary>
+<summary><b>Q5: How to change login password?</b></summary>
 
 ```bash
 cd backend
@@ -272,7 +363,7 @@ No redeployment needed, takes effect immediately.
 </details>
 
 <details>
-<summary><b>Q5: How to use custom domain?</b></summary>
+<summary><b>Q6: How to use custom domain?</b></summary>
 
 1. Cloudflare Dashboard → Workers → Custom Domains
 2. Add backend domain: `api.yourdomain.com`
@@ -285,7 +376,7 @@ No redeployment needed, takes effect immediately.
 </details>
 
 <details>
-<summary><b>Q6: How to backup data?</b></summary>
+<summary><b>Q7: How to backup data?</b></summary>
 
 ```bash
 # Backup database
