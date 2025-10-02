@@ -752,18 +752,26 @@ class PebbleDrive {
             // 在 demo 模式下，先尝试获取文本内容
             const text = await response.text();
 
-            // 如果是 data URL (PNG base64)，直接返回
+            // 如果是 data URL (PNG/SVG data URL)，直接返回
             if (text.startsWith('data:')) {
                 return text;
             }
 
-            // 如果是外部 URL (PDF)，直接返回
+            // 如果是外部 URL (PDF)，需要先获取内容再创建 blob URL
             if (text.startsWith('http://') || text.startsWith('https://')) {
-                return text;
+                try {
+                    const pdfResponse = await fetch(text);
+                    const pdfBlob = await pdfResponse.blob();
+                    return URL.createObjectURL(pdfBlob);
+                } catch (error) {
+                    console.error('Failed to fetch external URL:', error);
+                    // 如果获取失败，直接返回 URL（可能会自动下载）
+                    return text;
+                }
             }
 
-            // 否则是二进制数据或文本内容，创建 blob URL
-            const blob = new Blob([text]);
+            // 否则是文本内容 (SVG源码、Markdown、JS 等)，创建 blob URL
+            const blob = new Blob([text], { type: 'text/plain' });
             return URL.createObjectURL(blob);
         } catch (error) {
             console.error('Get blob URL error:', error);
