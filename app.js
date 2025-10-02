@@ -108,8 +108,24 @@ if (DEMO_MODE) {
                 }));
         }
 
-        // 上传/删除/分享 - 返回错误
-        if (url.includes('/api/upload') || url.includes('/api/delete') || url.includes('/api/share')) {
+        // 分享请求 - 返回模拟分享链接
+        if (url.includes('/api/share')) {
+            const mockToken = Math.random().toString(36).substring(2, 15);
+            const data = {
+                shareUrl: `https://demo.pebbledrive.com/share/${mockToken}`,
+                token: mockToken
+            };
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve(data),
+                text: () => Promise.resolve(JSON.stringify(data)),
+                blob: () => Promise.resolve(new Blob([JSON.stringify(data)]))
+            });
+        }
+
+        // 上传/删除 - 返回错误
+        if (url.includes('/api/upload') || url.includes('/api/delete')) {
             const data = {
                 error: 'This feature is disabled in demo mode',
                 message: 'Demo 模式不支持此功能'
