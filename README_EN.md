@@ -598,6 +598,9 @@ Configure in Worker Settings → Variables:
 
 ## 📖 API Documentation
 
+<details>
+<summary><b>Click to expand full API documentation</b></summary>
+
 ### Authentication
 ```http
 POST /api/login
@@ -639,6 +642,8 @@ Response: {
   "unlimited": false
 }
 ```
+
+</details>
 
 ---
 

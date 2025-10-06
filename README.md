@@ -598,6 +598,9 @@ wrangler d1 execute pebble-drive-db --command "SELECT name FROM sqlite_master WH
 
 ## 📖 API 文档
 
+<details>
+<summary><b>点击展开查看完整 API 文档</b></summary>
+
 ### 认证
 ```http
 POST /api/login
@@ -640,7 +643,9 @@ Response: {
 }
 ```
 
+</details>
 
+---
 ## ❓ 常见问题
 
 <details>
