@@ -116,6 +116,79 @@
         .dark .markdown-preview th, .dark .markdown-preview td { border-color: #4b5563; }
         .markdown-preview th { background-color: #f9fafb; font-weight: bold; }
         .dark .markdown-preview th { background-color: #374151; }
+
+        /* 自定义滚动条样式（支持夜间模式） */
+        /* Webkit 浏览器 (Chrome, Safari, Edge) */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* 夜间模式滚动条 */
+        .dark ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+        }
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        /* Firefox 滚动条 */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+        .dark * {
+            scrollbar-color: #4b5563 #1f2937;
+        }
+
+        /* 预览区域专用滚动条样式（更明显） */
+        #previewArea::-webkit-scrollbar,
+        #mobilePreviewArea::-webkit-scrollbar {
+            width: 10px;
+        }
+        #previewArea::-webkit-scrollbar-track,
+        #mobilePreviewArea::-webkit-scrollbar-track {
+            background: #e5e7eb;
+            border-radius: 5px;
+        }
+        #previewArea::-webkit-scrollbar-thumb,
+        #mobilePreviewArea::-webkit-scrollbar-thumb {
+            background: #9ca3af;
+            border-radius: 5px;
+        }
+        #previewArea::-webkit-scrollbar-thumb:hover,
+        #mobilePreviewArea::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        /* 夜间模式预览区域滚动条 */
+        .dark #previewArea::-webkit-scrollbar-track,
+        .dark #mobilePreviewArea::-webkit-scrollbar-track {
+            background: #374151;
+        }
+        .dark #previewArea::-webkit-scrollbar-thumb,
+        .dark #mobilePreviewArea::-webkit-scrollbar-thumb {
+            background: #6b7280;
+        }
+        .dark #previewArea::-webkit-scrollbar-thumb:hover,
+        .dark #mobilePreviewArea::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
     </style>
     <!-- Cloudflare Turnstile -->
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
