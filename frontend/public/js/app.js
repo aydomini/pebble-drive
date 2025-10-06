@@ -1,4 +1,13 @@
 /**
+ * Cloudflare Turnstile 配置
+ * 启用 Turnstile 人机验证保护
+ * 配置方法：见 README 安全配置章节
+ *
+ * 注意：Turnstile 验证为必需的安全组件
+ */
+window.TURNSTILE_SITE_KEY = window.VITE_TURNSTILE_SITE_KEY || ''; // 从 index.html 中注入
+
+/**
  * 主题管理类
  */
 class ThemeManager {
@@ -193,7 +202,20 @@ class I18nManager {
 
                 // 空状态
                 emptyState: '暂无文件，拖拽或选择文件开始上传',
-                noSearchResults: '没有找到匹配的文件'
+                noSearchResults: '没有找到匹配的文件',
+
+                // 分页
+                showingFiles: '显示',
+                totalFiles: '共',
+                files: '个文件',
+                previousPage: '上一页',
+                nextPage: '下一页',
+
+                // 登录安全
+                loggingIn: '登录中...',
+                loginBlocked: '登录已锁定，请 {seconds} 秒后重试',
+                loginBlockedInitial: '密码错误次数过多，已锁定 {seconds} 秒',
+                remainingAttempts: '剩余尝试次数'
             },
             en: {
                 // Login screen
@@ -312,7 +334,20 @@ class I18nManager {
 
                 // Empty state
                 emptyState: 'No files yet, drag or select files to upload',
-                noSearchResults: 'No matching files found'
+                noSearchResults: 'No matching files found',
+
+                // Pagination
+                showingFiles: 'Showing',
+                totalFiles: 'of',
+                files: 'files',
+                previousPage: 'Previous',
+                nextPage: 'Next',
+
+                // Login Security
+                loggingIn: 'Logging in...',
+                loginBlocked: 'Login locked, please try again in {seconds} seconds',
+                loginBlockedInitial: 'Too many failed attempts, locked for {seconds} seconds',
+                remainingAttempts: 'Remaining attempts'
             }
         };
         // 延迟应用语言，确保 DOM 已加载
@@ -420,14 +455,26 @@ class AuthManager {
 
     /**
      * 登录
+     * 需要 Turnstile 验证
      */
     async login(password) {
+        // 检查 Turnstile 配置
+        if (!window.TURNSTILE_SITE_KEY) {
+            throw new Error('Turnstile验证未配置，请联系管理员');
+        }
+
+        // 获取 Turnstile token
+        const turnstileToken = this.getTurnstileToken();
+        if (!turnstileToken) {
+            throw new Error('请完成人机验证后重试');
+        }
+
         const response = await fetch(`${this.apiEndpoint}/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ password })
+            body: JSON.stringify({ password, turnstileToken })
         });
 
         // 检查响应是否有内容
@@ -472,6 +519,29 @@ class PebbleDrive {
     constructor() {
         this.files = [];
         this.selectedFileId = null; // 当前选中的文件ID
+
+        // 分页状态
+        this.pagination = {
+            currentPage: 1,
+            pageSize: 10,
+            total: 0,
+            totalPages: 0
+        };
+
+        // 搜索和排序状态
+        this.searchTerm = '';
+        this.sortBy = 'uploadDate';
+        this.sortOrder = 'desc';
+
+        // 登录失败限制（前端限制，已移至后端）
+        // this.loginAttempts = 0;
+        // this.loginBlockedUntil = 0;
+        // this.maxLoginAttempts = 3;
+        // this.blockDuration = 60000; // 60 秒
+
+        // Turnstile Widget ID
+        this.turnstileWidgetId = null;
+
         // Use environment variable or fallback to relative path
         const apiBase = (typeof window !== 'undefined' && window.ENV_API_BASE_URL)
             ? window.ENV_API_BASE_URL
@@ -506,6 +576,136 @@ class PebbleDrive {
         document.getElementById('loginScreen').style.display = 'flex';
         document.getElementById('appScreen').style.display = 'none';
         this.setupLoginEventListeners();
+        this.initTurnstile();
+    }
+
+    /**
+     * 初始化 Turnstile
+     * 需要 Turnstile 配置和加载
+     */
+    initTurnstile() {
+        // 检查 Turnstile 配置
+        if (!window.TURNSTILE_SITE_KEY) {
+            console.error('Turnstile未配置，无法初始化验证组件');
+            const loginError = document.getElementById('loginError');
+            const loginErrorText = document.getElementById('loginErrorText');
+            if (loginError && loginErrorText) {
+                loginErrorText.textContent = 'Turnstile验证未配置，请联系管理员';
+                loginError.classList.remove('hidden');
+            }
+            return;
+        }
+
+        // 如果已经初始化过，重置 widget 而不是重新创建
+        if (this.turnstileWidgetId !== null && window.turnstile) {
+            try {
+                window.turnstile.reset(this.turnstileWidgetId);
+                console.log('Turnstile组件已重置');
+                return;
+            } catch (error) {
+                console.error('Turnstile重置失败，将重新创建:', error);
+                // 重置失败，清除旧的 widget ID，继续创建新的
+                this.turnstileWidgetId = null;
+            }
+        }
+
+        // 等待 Turnstile 脚本加载（异步脚本需要时间）
+        const waitForTurnstile = () => {
+            if (!window.turnstile) {
+                console.log('等待 Turnstile 脚本加载...');
+                setTimeout(waitForTurnstile, 100); // 每 100ms 检查一次
+                return;
+            }
+
+            // Turnstile 脚本已加载，开始初始化
+            this.renderTurnstile();
+        };
+
+        waitForTurnstile();
+    }
+
+    /**
+     * 渲染 Turnstile 组件
+     */
+    renderTurnstile() {
+        const container = document.getElementById('turnstile-container');
+        if (!container) {
+            console.error('Turnstile容器未找到');
+            return;
+        }
+
+        // 清空容器内容（移除旧的 widget）
+        container.innerHTML = '';
+
+        // 确保容器可见
+        container.classList.remove('hidden');
+
+        try {
+            // 获取当前语言（Turnstile 支持的语言代码）
+            const langMap = {
+                'zh': 'zh-CN',  // 中文
+                'en': 'en',     // 英文
+                'ja': 'ja'      // 日文
+            };
+            const currentLang = this.i18n ? this.i18n.lang : 'zh';
+            const turnstileLang = langMap[currentLang] || 'auto';
+
+            // 渲染 Turnstile widget
+            // 使用 normal 尺寸以确保宽度一致（300x65px）
+            this.turnstileWidgetId = window.turnstile.render('#turnstile-container', {
+                sitekey: window.TURNSTILE_SITE_KEY,
+                theme: this.theme.theme === 'dark' ? 'dark' : 'light',
+                language: turnstileLang,
+                size: 'normal' // 使用 normal 尺寸（固定 300x65px），确保不会超出密码框宽度
+            });
+            console.log('Turnstile组件初始化成功');
+        } catch (error) {
+            console.error('Turnstile组件初始化失败:', error);
+            const loginError = document.getElementById('loginError');
+            const loginErrorText = document.getElementById('loginErrorText');
+            if (loginError && loginErrorText) {
+                loginErrorText.textContent = 'Turnstile验证组件初始化失败，请刷新页面重试';
+                loginError.classList.remove('hidden');
+            }
+        }
+    }
+
+    /**
+     * 获取 Turnstile token
+     * 需要 Turnstile 验证
+     */
+    getTurnstileToken() {
+        // 检查 Turnstile 是否配置
+        if (!window.TURNSTILE_SITE_KEY) {
+            throw new Error('Turnstile验证未配置，请联系管理员');
+        }
+
+        // 检查 Turnstile 是否加载
+        if (!window.turnstile) {
+            throw new Error('Turnstile验证组件未加载，请刷新页面重试');
+        }
+
+        // 检查 widget 是否渲染
+        if (this.turnstileWidgetId === null) {
+            throw new Error('Turnstile验证组件未初始化，请刷新页面重试');
+        }
+
+        const token = window.turnstile.getResponse(this.turnstileWidgetId);
+        if (!token) {
+            throw new Error('请完成人机验证后重试');
+        }
+
+        return token;
+    }
+
+    /**
+     * 重置 Turnstile
+     */
+    resetTurnstile() {
+        if (!window.turnstile || this.turnstileWidgetId === null) {
+            return;
+        }
+        window.turnstile.reset(this.turnstileWidgetId);
     }
 
     /**
@@ -538,25 +738,67 @@ class PebbleDrive {
 
             // 显示加载状态
             loginBtn.disabled = true;
-            loginBtnText.textContent = '登录中...';
+            loginBtnText.textContent = this.i18n.t('loggingIn');
             loginError.classList.add('hidden');
 
             try {
-                await this.auth.login(password);
-                // 登录成功，显示主界面
+                // 获取 Turnstile token（如果已配置）
+                const turnstileToken = this.getTurnstileToken();
+
+                // 调用登录 API
+                const response = await fetch(`${this.apiEndpoint}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        password,
+                        turnstileToken
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    // 处理各种错误
+                    if (response.status === 429 || response.status === 423) {
+                        // IP 速率限制或账户锁定
+                        const seconds = data.remainingSeconds || 0;
+                        loginErrorText.textContent = data.message || `请 ${seconds} 秒后重试`;
+                    } else {
+                        // 密码错误等其他错误
+                        loginErrorText.textContent = data.message || '登录失败';
+                    }
+                    loginError.classList.remove('hidden');
+
+                    // 重置 Turnstile
+                    this.resetTurnstile();
+
+                    // 清空密码输入框
+                    passwordInput.value = '';
+                    passwordInput.focus();
+                    return;
+                }
+
+                // 登录成功
+                this.auth.setToken(data.token);
                 this.showAppScreen();
+
             } catch (error) {
-                // 显示错误
-                loginErrorText.textContent = error.message;
+                console.error('Login error:', error);
+                loginErrorText.textContent = '登录失败，请稍后重试';
                 loginError.classList.remove('hidden');
+
+                // 重置 Turnstile
+                this.resetTurnstile();
+
                 // 清空密码输入框
                 passwordInput.value = '';
-                // 重新聚焦到密码输入框
                 passwordInput.focus();
             } finally {
                 // 恢复按钮状态
                 loginBtn.disabled = false;
-                loginBtnText.textContent = '登录';
+                loginBtnText.textContent = this.i18n.t('loginBtn');
             }
         };
     }
@@ -591,13 +833,30 @@ class PebbleDrive {
         // 登出按钮
         logoutBtn.addEventListener('click', () => {
             this.auth.logout();
+            // 清空密码输入框
+            const passwordInput = document.getElementById('loginPassword');
+            if (passwordInput) {
+                passwordInput.value = '';
+            }
             this.showLoginScreen();
+
+            // 重新初始化 Turnstile 以适配当前主题和语言
+            if (window.TURNSTILE_SITE_KEY) {
+                // 延迟执行，确保登录界面已显示
+                setTimeout(() => {
+                    this.initTurnstile();
+                }, 100);
+            }
         });
 
         // 主题切换按钮
         if (themeToggle) {
             themeToggle.addEventListener('click', () => {
                 this.theme.toggle();
+                // 如果在登录界面，更新 Turnstile 主题
+                if (!this.auth.isAuthenticated() && this.turnstileWidgetId !== null) {
+                    this.initTurnstile();
+                }
             });
         }
 
@@ -607,6 +866,10 @@ class PebbleDrive {
                 this.i18n.toggle();
                 // 重新渲染文件列表以更新界面文本
                 this.filterFiles();
+                // 如果在登录界面，更新 Turnstile 语言
+                if (!this.auth.isAuthenticated() && this.turnstileWidgetId !== null) {
+                    this.initTurnstile();
+                }
             });
         }
 
@@ -821,15 +1084,35 @@ class PebbleDrive {
 
     async loadFiles() {
         try {
+            // 构建查询参数
+            const params = new URLSearchParams({
+                page: this.pagination.currentPage,
+                pageSize: this.pagination.pageSize,
+                search: this.searchTerm,
+                sortBy: this.sortBy,
+                sortOrder: this.sortOrder
+            });
+
             // 调用 API 加载文件列表
-            const response = await fetch(`${this.apiEndpoint}/files`, {
+            const response = await fetch(`${this.apiEndpoint}/files?${params}`, {
                 headers: {
                     ...this.auth.getAuthHeaders()
                 }
             });
-            this.files = await response.json();
+
+            const data = await response.json();
+
+            // 更新分页信息和文件列表
+            this.files = data.files || [];
+            this.pagination = {
+                currentPage: data.page,
+                pageSize: data.pageSize,
+                total: data.total,
+                totalPages: data.totalPages
+            };
 
             this.renderFileList();
+            this.renderPagination();
             this.updateStorageInfo();
         } catch (error) {
             console.error('Load files error:', error);
@@ -1583,30 +1866,111 @@ class PebbleDrive {
 
     filterFiles() {
         const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        const filteredFiles = this.files.filter(file =>
-            file.name.toLowerCase().includes(searchTerm)
-        );
-        this.renderFilteredFiles(filteredFiles);
+        this.searchTerm = searchTerm;
+        this.pagination.currentPage = 1; // 重置到第一页
+        this.loadFiles();
     }
 
     sortFiles() {
         const sortBy = document.getElementById('sortBy').value;
-        let sortedFiles = [...this.files];
+        this.sortBy = sortBy;
+        this.pagination.currentPage = 1; // 重置到第一页
+        this.loadFiles();
+    }
 
-        switch(sortBy) {
-            case 'name':
-                sortedFiles.sort((a, b) => a.name.localeCompare(b.name));
-                break;
-            case 'size':
-                sortedFiles.sort((a, b) => b.size - a.size);
-                break;
-            case 'date':
-                sortedFiles.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
-                break;
+    renderPagination() {
+        const paginationContainer = document.getElementById('paginationContainer');
+        if (!paginationContainer) return;
+
+        const { currentPage, totalPages, total } = this.pagination;
+
+        if (total === 0 || totalPages === 0) {
+            paginationContainer.innerHTML = '';
+            return;
         }
 
-        this.files = sortedFiles;
-        this.renderFileList();
+        // 计算显示的页码范围
+        const maxVisiblePages = 5;
+        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+        if (endPage - startPage < maxVisiblePages - 1) {
+            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+        }
+
+        let paginationHTML = '<div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">';
+
+        // 左侧：文件统计
+        const startItem = (currentPage - 1) * this.pagination.pageSize + 1;
+        const endItem = Math.min(currentPage * this.pagination.pageSize, total);
+        paginationHTML += `<div class="text-xs">${this.i18n.t('showingFiles')} ${startItem}-${endItem} / ${this.i18n.t('totalFiles')} ${total} ${this.i18n.t('files')}</div>`;
+
+        // 右侧：分页按钮
+        paginationHTML += '<div class="flex items-center space-x-1">';
+
+        // 上一页按钮
+        paginationHTML += `
+            <button
+                onclick="app.goToPage(${currentPage - 1})"
+                class="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                ${currentPage === 1 ? 'disabled' : ''}
+            >
+                <i class="fas fa-chevron-left"></i>
+            </button>
+        `;
+
+        // 第一页
+        if (startPage > 1) {
+            paginationHTML += `
+                <button onclick="app.goToPage(1)" class="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-xs">1</button>
+            `;
+            if (startPage > 2) {
+                paginationHTML += '<span class="px-1">...</span>';
+            }
+        }
+
+        // 页码按钮
+        for (let i = startPage; i <= endPage; i++) {
+            const isActive = i === currentPage;
+            paginationHTML += `
+                <button
+                    onclick="app.goToPage(${i})"
+                    class="px-2 py-1 rounded text-xs ${isActive ? 'bg-blue-500 text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}"
+                >
+                    ${i}
+                </button>
+            `;
+        }
+
+        // 最后一页
+        if (endPage < totalPages) {
+            if (endPage < totalPages - 1) {
+                paginationHTML += '<span class="px-1">...</span>';
+            }
+            paginationHTML += `
+                <button onclick="app.goToPage(${totalPages})" class="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-xs">${totalPages}</button>
+            `;
+        }
+
+        // 下一页按钮
+        paginationHTML += `
+            <button
+                onclick="app.goToPage(${currentPage + 1})"
+                class="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                ${currentPage === totalPages ? 'disabled' : ''}
+            >
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        `;
+
+        paginationHTML += '</div></div>';
+        paginationContainer.innerHTML = paginationHTML;
+    }
+
+    goToPage(page) {
+        if (page < 1 || page > this.pagination.totalPages) return;
+        this.pagination.currentPage = page;
+        this.loadFiles();
     }
 
     renderFilteredFiles(files) {

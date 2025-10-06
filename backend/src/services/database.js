@@ -72,6 +72,60 @@ export async function getAllFiles(env) {
 }
 
 /**
+ * 获取文件（分页、搜索、排序）
+ */
+export async function getFilesPaginated(env, options = {}) {
+    const {
+        page = 1,
+        pageSize = 10,
+        search = '',
+        sortBy = 'uploadDate',
+        sortOrder = 'desc'
+    } = options;
+
+    // 验证排序字段
+    const allowedSortFields = ['name', 'size', 'uploadDate'];
+    const sortField = allowedSortFields.includes(sortBy) ? sortBy : 'uploadDate';
+    const order = sortOrder.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+    // 构建搜索条件
+    const searchCondition = search ? `WHERE name LIKE ?` : '';
+    const searchParam = search ? `%${search}%` : null;
+
+    // 计算总数
+    let countQuery = `SELECT COUNT(*) as total FROM files ${searchCondition}`;
+    const countStmt = env.DB.prepare(countQuery);
+    const { total } = searchParam
+        ? await countStmt.bind(searchParam).first()
+        : await countStmt.first();
+
+    // 查询文件列表
+    const offset = (page - 1) * pageSize;
+    let filesQuery = `
+        SELECT id, name, size, type, uploadDate, downloadUrl
+        FROM files
+        ${searchCondition}
+        ORDER BY ${sortField} ${order}
+        LIMIT ? OFFSET ?
+    `;
+
+    const filesStmt = env.DB.prepare(filesQuery);
+    const params = searchParam
+        ? [searchParam, pageSize, offset]
+        : [pageSize, offset];
+
+    const { results } = await filesStmt.bind(...params).all();
+
+    return {
+        files: results || [],
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+    };
+}
+
+/**
  * 根据ID获取文件
  */
 export async function getFileById(env, fileId) {

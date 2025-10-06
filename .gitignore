@@ -12,6 +12,7 @@ dist/
 .env
 .env.local
 .env.production
+.env.turnstile
 .dev.vars
 
 # Wrangler

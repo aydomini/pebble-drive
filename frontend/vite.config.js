@@ -11,7 +11,16 @@ export default defineConfig({
           dest: 'js'
         }
       ]
-    })
+    }),
+    {
+      name: 'html-transform',
+      transformIndexHtml(html) {
+        // 替换环境变量占位符
+        return html
+          .replace(/%VITE_API_BASE_URL%/g, process.env.VITE_API_BASE_URL || '')
+          .replace(/%VITE_TURNSTILE_SITE_KEY%/g, process.env.VITE_TURNSTILE_SITE_KEY || '');
+      }
+    }
   ],
   build: {
     outDir: '../dist',
@@ -29,12 +38,13 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:8787',
+        target: 'http://localhost:8788',
         changeOrigin: true
       }
     }
   },
   define: {
-    '__VITE_API_BASE_URL__': JSON.stringify(process.env.VITE_API_BASE_URL || '')
+    '__VITE_API_BASE_URL__': JSON.stringify(process.env.VITE_API_BASE_URL || ''),
+    '__VITE_TURNSTILE_SITE_KEY__': JSON.stringify(process.env.VITE_TURNSTILE_SITE_KEY || '')
   }
 });

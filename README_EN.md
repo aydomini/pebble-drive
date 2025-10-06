@@ -2,9 +2,9 @@
 
 [中文](README.md) | **English** | **[🎭 Live Demo](https://aydomini.github.io/pebble-drive/)**
 
-> Modern cloud storage solution powered by Cloudflare Workers + R2 + D1
+> 🚀 **5-minute deployment, completely free personal cloud storage**
 >
-> **100% Free Deployment** | **Global CDN Acceleration** | **Smart Storage Management**
+> **Serverless Architecture** | **Global CDN Acceleration** | **Enterprise-grade Security**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-orange.svg)](https://workers.cloudflare.com/)
@@ -16,243 +16,583 @@
 
 ### Core Capabilities
 - 🚀 **Serverless Architecture** - Global edge deployment with 100k requests/day free tier
-- 📦 **Dual Storage System** - R2 for files (10GB free) + D1 for metadata (5GB free)
-- 📤 **Drag & Drop Upload** - Multi-file upload, up to 100MB per file
-- 🔗 **Advanced Sharing** - Password protection, time-limited links, download count limits
-- 👁️ **File Preview** - Support for images, PDF, Markdown, 40+ code languages, SVG
-- 🌍 **Multi-language UI** - Chinese/English toggle
-- 🌓 **Dark Mode** - Adaptive theme switching
-- 📱 **Responsive Design** - Perfect for desktop and mobile
+- 📦 **Triple Storage System** - R2 for files (10GB free) + D1 for metadata (5GB free) + KV for sessions & rate limiting
+- 📤 **Drag & Drop Upload** - Multi-file upload, up to 100MB per file, smart paginated list
+- 🔗 **Advanced Sharing** - Password protection, time-limited links, download count limits, access statistics
+- 👁️ **Comprehensive Preview** - Support for images, PDF, Markdown, 40+ code languages, SVG (dual preview), plain text files
+- 🔐 **Enterprise-grade Security** - Multi-layer protection: IP rate limiting, account lockout, Cloudflare Turnstile verification, JWT authentication
+- 🌍 **Multi-language UI** - Chinese/English/Japanese adaptive switching
+- 🌓 **Dark Mode** - Adaptive theme switching with system preference support
+- 📱 **Perfectly Responsive** - Desktop/tablet/mobile full adaptation
+- ⚡ **Optimal Performance** - Global CDN acceleration, millisecond response, offline cache support
 
 ### Architecture
 ```
-User → Cloudflare Pages (Frontend) → Workers (Backend) → R2 (Files) + D1 (Metadata)
+User → Cloudflare Pages (Frontend) → Workers (Backend API) → R2 (Files) + D1 (Metadata) + KV (Sessions/Limiting)
 ```
 
-**Why R2 and D1?**
+**Why three storage types?**
 
 | Storage | Purpose | Advantages |
 |---------|---------|------------|
-| **R2** | File content | Zero egress fees, global CDN, 10GB free |
-| **D1** | File metadata | Complex queries, transactions, foreign keys, 5GB free |
+| **R2** | File content | Zero egress fees, global CDN, 10GB free, large-file friendly |
+| **D1** | Structured data | Complex queries, transactions, foreign keys, 5GB free, SQL-like |
+| **KV** | Key-value data | Millisecond read/write, global distribution, rate limiting, session management |
 
-**Workflow**: Upload → Files to R2 → Metadata to D1 → Share validation → Return files
+**Complete Workflow**:
+```
+Upload File → Turnstile Verify → File to R2 → Metadata to D1 → Session to KV → Generate Share Link
+Access Share → Rate Limit Check → Permission Verify → D1 Query → R2 Get File → Return Content
+```
 
 ### Tech Stack
-- **Frontend**: Vite + Vanilla JS + TailwindCSS
-- **Backend**: Cloudflare Workers + R2 + D1
-- **Deployment**: GitHub Actions + Wrangler CLI
+
+**Frontend Technologies**
+- **Build Tool**: Vite 5.x - Lightning-fast dev server and optimized builds
+- **Core Framework**: Vanilla JavaScript ES6+ - Zero dependencies, ultimate performance
+- **UI Framework**: TailwindCSS 3.x - Atomic CSS, rapid development
+- **Preview Libraries**: Marked.js (Markdown), Highlight.js (code highlighting)
+- **Icon Library**: Font Awesome 6.x - Rich icon resources
+- **Internationalization**: Custom i18n system
+
+**Backend Technologies**
+- **Runtime**: Cloudflare Workers (V8 engine)
+- **Storage Services**: R2 (object storage) + D1 (SQLite) + KV (key-value storage)
+- **Security Authentication**: JWT + Cloudflare Turnstile
+- **API Design**: RESTful API, OpenAPI 3.0 specification
+
+**Deployment & Operations**
+- **CI/CD**: GitHub Actions - Automated deployment pipeline
+- **CLI Tool**: Wrangler 2.x - Official Cloudflare toolchain
+- **Monitoring**: Cloudflare Analytics - Real-time performance monitoring
+- **Version Control**: Git + GitHub - Code version management
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: GitHub Actions Auto-Deploy (Recommended)
+### 📋 Deployment Preparation
 
-**Best for: Automatic deployment after forking**
+**Required Resources (All Free):**
+- Cloudflare Account (for Workers, R2, D1, KV)
+- Turnstile Site (for human verification, free)
 
-1. **Fork this repository** to your GitHub account
+**Optional Resources:**
+- GitHub Account (for GitHub Actions auto-deployment)
 
-2. **Set GitHub Secrets** (Settings → Secrets → Actions)
-   - `CLOUDFLARE_API_TOKEN` - Cloudflare API Token
-   - `CLOUDFLARE_ACCOUNT_ID` - Cloudflare Account ID
-   - `PAGES_PROJECT_NAME` - Pages project name (optional, default: `pebble-drive`)
+**🎯 Choose Your Deployment Method:**
 
-3. **Create Cloudflare resources and configure**
-   ```bash
-   wrangler r2 bucket create pebble-drive-storage
-   wrangler d1 create pebble-drive-db
-   # Edit backend/wrangler.toml, replace database_id
-   ```
-
-4. **Push code to trigger auto-deployment**
-   ```bash
-   git add .
-   git commit -m "Configure database_id"
-   git push
-   ```
-
-5. **After deployment, set environment variables**
-   ```bash
-   cd backend
-   echo "your-password" | wrangler secret put AUTH_PASSWORD
-   echo "your-secret" | wrangler secret put AUTH_TOKEN_SECRET
-   echo "10" | wrangler secret put STORAGE_QUOTA_GB
-   ```
-
-### Option 2: One-Click Deploy Script
-
-**Best for: Local one-click deployment**
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/aydomini/pebble-drive.git
-cd pebble-drive
-
-# 2. Login to Cloudflare
-wrangler login
-
-# 3. Create resources
-wrangler r2 bucket create pebble-drive-storage
-wrangler d1 create pebble-drive-db
-# ⚠️ Save the returned database_id
-
-# 4. Configure database
-cd backend
-cp wrangler.toml.example wrangler.toml
-# Edit wrangler.toml, replace database_id with value from step 3
-
-# 5. Initialize database
-wrangler d1 execute pebble-drive-db --file=./migrations/schema.sql
-
-# 6. Run deploy script
-cd ..
-./deploy.sh
-```
-
-The deploy script will automatically:
-- Deploy backend Worker
-- Prompt for environment variables (password, secret, quota)
-- Auto-fetch Worker URL and build frontend
-- Deploy frontend to Pages
-
-### Option 3: Manual Deployment
-
-<details>
-<summary>Click to expand manual deployment steps</summary>
-
-```bash
-# Steps 1-5 are same as one-click deployment
-
-# 6. Set environment variables
-cd backend
-echo "your-password" | wrangler secret put AUTH_PASSWORD
-echo "your-jwt-secret" | wrangler secret put AUTH_TOKEN_SECRET
-echo "10" | wrangler secret put STORAGE_QUOTA_GB  # Optional
-
-# 7. Deploy backend
-npm install
-wrangler deploy
-# Save the Worker URL output
-
-# 8. Deploy frontend
-cd ../frontend
-npm install
-VITE_API_BASE_URL=https://YOUR-WORKER-URL.workers.dev npm run build
-npx wrangler pages deploy dist --project-name=pebble-drive
-```
-
-</details>
+| Method | Difficulty | Best For | Time Required |
+|--------|-----------|----------|---------------|
+| **Method 1: Cloudflare Dashboard Deployment** | ⭐ Easy | Complete beginners, no command line | 10-15 min |
+| **Method 2: GitHub Actions Auto-Deploy** | ⭐⭐ Medium | Git users who want automation | 5-10 min |
+| **Method 3: Local Secure Deployment** | ⭐⭐⭐ Advanced | Privacy-conscious users, CLI familiar | 3-5 min |
+| **Method 4: Manual Deployment** | ⭐⭐⭐⭐ Expert | Developers who need full control | 15-20 min |
 
 ---
 
-## 🔄 Database Migration
+<details open>
+<summary>
 
-### 📌 Important Notice
+### Method 1: Cloudflare Dashboard Deployment (🌟 Easiest, Highly Recommended for Beginners)
 
-**🎉 New Users - No Migration Needed!**
+**Best for: Complete beginners, all done with mouse clicks**
 
-If you're deploying for the first time (following "Quick Start" above with `schema.sql`), your database already contains all required table structures. You can use all features directly.
+</summary>
+
+#### 📝 Prerequisites
+
+1. **Register Cloudflare Account**
+   - Visit [Cloudflare](https://dash.cloudflare.com/sign-up)
+   - Register with email (completely free)
+
+2. **Download Project Code**
+   - Visit [Project Homepage](https://github.com/aydomini/pebble-drive)
+   - Click green **Code** button → **Download ZIP**
+   - Extract to local folder
 
 ---
 
-### ⚠️ For Existing Users Only: If deployed before 2025-10-02
+#### Step 1: Create Turnstile Human Verification (2 minutes)
 
-**Symptoms**:
-- ✅ Basic sharing works fine
-- ❌ Advanced sharing (password/expiry/download limit) fails with error: `Failed to create share link`
+1. Login to Cloudflare, visit [Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
+2. Click **Add site** button
+3. Fill in configuration:
+   - **Site name**: `pebble-drive` (any name)
+   - **Domains**: `*.pages.dev` (Cloudflare Pages wildcard domain)
+   - **Widget type**: Select **Managed Challenge**
+4. Click **Create**
+5. **📋 Record two keys** (will use later):
+   - **Site Key** (starts with `0x4AAAAAAA`)
+   - **Secret Key** (starts with `0x4AAAAAAA`)
 
-**Cause**: Old `shares` table missing columns required for advanced sharing features.
+---
 
-**Solution**:
+#### Step 2: Create R2 Storage Bucket (1 minute)
 
-```bash
-# Method 1: Auto-migration (Recommended)
-cd backend
-wrangler d1 execute pebble-drive-db --file=./migrations/migrate_shares.sql --remote
+1. In Cloudflare Dashboard, click **R2** on left sidebar
+2. If first time, click **Purchase R2 Plan** (select free plan)
+3. Click **Create bucket** button
+4. Enter name: `pebble-drive-storage`
+5. Region: **Automatic**
+6. Click **Create bucket**
 
-# Method 2: Manual column addition
-wrangler d1 execute pebble-drive-db --remote --command "
-ALTER TABLE shares ADD COLUMN password TEXT;
-ALTER TABLE shares ADD COLUMN downloadLimit INTEGER;
-ALTER TABLE shares ADD COLUMN downloadCount INTEGER DEFAULT 0;
-"
+---
 
-# Method 3: Rebuild table (if Method 2 fails)
-# Create migration file
-cat > /tmp/migrate_shares.sql << 'EOF'
-CREATE TABLE shares_new (
+#### Step 3: Create D1 Database (2 minutes)
+
+1. In Cloudflare Dashboard, click **Workers & Pages** → **D1** on left sidebar
+2. Click **Create database** button
+3. Enter name: `pebble-drive-db`
+4. Click **Create**
+5. **📋 Record Database ID** (shown on right side of database details page)
+
+**Initialize Database Structure:**
+1. On database details page, click **Console** tab
+2. Copy and paste the following SQL into input box:
+
+```sql
+-- Files table
+CREATE TABLE IF NOT EXISTS files (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    uploadDate INTEGER NOT NULL,
+    downloadUrl TEXT NOT NULL
+);
+
+-- Shares table
+CREATE TABLE IF NOT EXISTS shares (
     token TEXT PRIMARY KEY,
     fileId TEXT NOT NULL,
     password TEXT,
     downloadLimit INTEGER,
     downloadCount INTEGER DEFAULT 0,
-    createdAt TEXT NOT NULL,
-    expiresAt TEXT,
-    FOREIGN KEY (fileId) REFERENCES files(id) ON DELETE CASCADE
+    expiresAt INTEGER,
+    createdAt INTEGER NOT NULL,
+    FOREIGN KEY (fileId) REFERENCES files(id)
 );
 
-INSERT INTO shares_new (token, fileId, createdAt, expiresAt, password, downloadLimit, downloadCount)
-SELECT token, fileId, createdAt, expiresAt, password, downloadLimit, downloadCount FROM shares;
-
-DROP TABLE shares;
-ALTER TABLE shares_new RENAME TO shares;
-
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_files_uploadDate ON files(uploadDate DESC);
 CREATE INDEX IF NOT EXISTS idx_shares_fileId ON shares(fileId);
 CREATE INDEX IF NOT EXISTS idx_shares_expiresAt ON shares(expiresAt);
-EOF
-
-# Execute migration
-wrangler d1 execute pebble-drive-db --file=/tmp/migrate_shares.sql --remote
 ```
 
-**Verify migration success**:
+3. Click **Execute**
+
+---
+
+#### Step 4: Create KV Namespace (1 minute)
+
+1. In Cloudflare Dashboard, click **Workers & Pages** → **KV** on left sidebar
+2. Click **Create namespace** button
+3. Enter name: `RATE_LIMIT_KV`
+4. Click **Add**
+5. **📋 Record Namespace ID** (shown in list)
+
+---
+
+#### Step 5: Deploy Backend Worker (3 minutes)
+
+1. In Cloudflare Dashboard, click **Workers & Pages** on left sidebar
+2. Click **Create application** → **Create Worker**
+3. Enter name: `pebble-drive-api`
+4. Click **Deploy** (deploy default code first)
+5. After successful deployment, click **Edit code** button
+
+**Upload Backend Code:**
+1. Delete all code in right editor
+2. Open your downloaded project folder → `backend/src/index.js`
+3. Copy all content, paste into editor
+4. Click **Save and Deploy** at top-right
+
+**Bind Resources:**
+1. Return to Worker details page, click **Settings** → **Variables**
+2. Scroll to **R2 Bucket Bindings**, click **Add binding**:
+   - Variable name: `R2_BUCKET`
+   - R2 bucket: Select `pebble-drive-storage`
+   - Click **Save**
+
+3. Scroll to **D1 Database Bindings**, click **Add binding**:
+   - Variable name: `DB`
+   - D1 database: Select `pebble-drive-db`
+   - Click **Save**
+
+4. Scroll to **KV Namespace Bindings**, click **Add binding**:
+   - Variable name: `RATE_LIMIT_KV`
+   - KV namespace: Select `RATE_LIMIT_KV`
+   - Click **Save**
+
+**Set Environment Variables (Secrets):**
+1. On same page, scroll to **Environment Variables**
+2. Click **Add variable**, add the following one by one (select **Encrypt** for type):
+
+   | Variable Name | Value | Description |
+   |--------------|-------|-------------|
+   | `AUTH_PASSWORD` | `your-login-password` | Login password, set yourself |
+   | `AUTH_TOKEN_SECRET` | `random-32-char-string` | JWT secret, randomly generate |
+   | `TURNSTILE_SECRET_KEY` | `Secret Key from Step 1` | Turnstile secret |
+   | `STORAGE_QUOTA_GB` | `10` | Storage quota (optional) |
+
+3. Click **Save and Deploy**
+
+**📋 Record Worker URL**:
+- At top of Worker details page, copy your Worker URL
+- Format: `https://pebble-drive-api.your-account.workers.dev`
+
+---
+
+#### Step 6: Deploy Frontend Pages (2 minutes)
+
+1. In Cloudflare Dashboard, click **Workers & Pages** on left sidebar
+2. Click **Create application** → **Pages** → **Upload assets**
+3. Enter project name: `pebble-drive`
+4. Click **Create project**
+
+**Prepare Frontend Files:**
+1. Open project folder → `frontend/public/index.html`
+2. Find line 333 area with this code:
+   ```javascript
+   window.ENV_API_BASE_URL = '%VITE_API_BASE_URL%';
+   ```
+3. Replace with:
+   ```javascript
+   window.ENV_API_BASE_URL = 'https://pebble-drive-api.your-account.workers.dev';
+   ```
+   (Use Worker URL from Step 5)
+
+4. Find line 337 area with this code:
+   ```javascript
+   window.VITE_TURNSTILE_SITE_KEY = '%VITE_TURNSTILE_SITE_KEY%';
+   ```
+5. Replace with:
+   ```javascript
+   window.VITE_TURNSTILE_SITE_KEY = '0x4AAAAAAA-your-site-key';
+   ```
+   (Use Site Key from Step 1)
+
+6. Save file
+
+**Upload Frontend:**
+1. Compress entire `frontend/public` folder as ZIP
+2. On Pages upload page, drag and drop ZIP file to upload
+3. Click **Deploy site**
+
+**✅ Complete!**
+
+Visit your Pages address (format: `https://your-project-name.pages.dev`), login with password from Step 5!
+
+---
+
+#### 🔧 Update Turnstile Domain (Important)
+
+After successful deployment, add Pages domain to Turnstile configuration:
+
+1. Visit [Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
+2. Click your created `pebble-drive` site
+3. In **Domains**, add your Pages domain (e.g., `your-project-name.pages.dev`)
+4. Delete previous `*.pages.dev` wildcard (more secure)
+5. Click **Save**
+
+</details>
+
+---
+
+<details>
+<summary>
+
+### Method 2: GitHub Actions Auto-Deploy (For Git Users)
+
+**Best for: Beginner users, one-click automated deployment**
+
+</summary>
+
+#### Step 1: Fork Project
+1. Visit [Project Homepage](https://github.com/aydomini/pebble-drive)
+2. Click **Fork** button at top-right
+3. Select your GitHub account
+
+#### Step 2: Create Required Cloudflare Resources
 ```bash
-wrangler d1 execute pebble-drive-db --remote --command "PRAGMA table_info(shares);"
-# Should see 7 columns: token, fileId, password, downloadLimit, downloadCount, createdAt, expiresAt
+# Install Wrangler CLI (if not installed)
+npm install -g wrangler
+
+# Login to Cloudflare
+wrangler login
+
+# Create storage bucket (for files)
+wrangler r2 bucket create pebble-drive-storage
+
+# Create database (for metadata)
+wrangler d1 create pebble-drive-db
+# 📝 Copy returned database_id (like: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+
+# Create KV namespace (for rate limiting)
+wrangler kv namespace create RATE_LIMIT_KV
+# 📝 Copy returned id (like: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)
+
+# Create preview environment KV
+wrangler kv namespace create RATE_LIMIT_KV --preview
+# 📝 Copy returned preview_id
 ```
 
-**After migration**:
-- ✅ All existing share links remain valid
-- ✅ Can create password-protected shares
-- ✅ Can set expiry time and download limits
+#### Step 3: Configure Project Files
+1. In GitHub repository, go to `backend/` directory
+2. Copy `wrangler.toml.example` to `wrangler.toml`
+3. Edit `wrangler.toml`, replace the following:
+   ```toml
+   # Find this line, replace with your database_id
+   database_id = "your-database-id-here"
+
+   # Find these lines, replace with your KV ids
+   id = "your-kv-id-here"
+   preview_id = "your-preview-kv-id-here"
+   ```
+
+#### Step 4: Configure GitHub Secrets
+In GitHub repository:
+1. Go to **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**, add the following:
+
+| Secret Name | Value | How to Get |
+|-------------|-------|------------|
+| `CLOUDFLARE_API_TOKEN` | Your API Token | Cloudflare Dashboard → My Profile → API Tokens |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Account ID | Cloudflare Dashboard → Right sidebar |
+
+#### Step 5: Create Turnstile (Human Verification)
+1. Visit [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
+2. Click **Add site**
+3. Configure:
+   - **Site name**: `pebble-drive`
+   - **Domains**: `*.pages.dev` (Cloudflare Pages wildcard)
+   - **Widget type**: Managed Challenge
+4. After creation, record:
+   - **Site Key** (starts with `0x4AAAAAAA`)
+   - **Secret Key** (starts with `0x4AAAAAAA`)
+
+#### Step 6: Set Authentication Secrets
+```bash
+cd backend
+
+# Set login password (replace with your password)
+echo "your-secure-password" | wrangler secret put AUTH_PASSWORD
+
+# Set JWT secret (randomly generated)
+openssl rand -base64 32 | tr -d '\n' | wrangler secret put AUTH_TOKEN_SECRET
+
+# Set storage quota (GB, optional, default 10)
+echo "10" | wrangler secret put STORAGE_QUOTA_GB
+
+# Set Turnstile secret key
+echo "your-turnstile-secret-key" | wrangler secret put TURNSTILE_SECRET_KEY
+```
+
+#### Step 7: Trigger Auto-Deployment
+```bash
+git add .
+git commit -m "🚀 Deploy PebbleDrive to Cloudflare"
+git push
+```
+
+🎉 **Done!** GitHub Actions will auto-deploy to Cloudflare. After completion:
+- Backend API: `https://pebble-drive-api.your-account.workers.dev`
+- Frontend App: `https://your-project-name.pages.dev` (or your custom domain)
+
+Visit frontend address to use!
+
+</details>
+
+---
+
+<details>
+<summary>
+
+### Method 3: Local Secure Deployment (For Privacy-Conscious Users)
+
+**Best for: Privacy-conscious users who don't want to expose configurations**
+
+</summary>
+
+```bash
+# 1. Clone project
+git clone https://github.com/aydomini/pebble-drive.git
+cd pebble-drive
+
+# 2. Run secure deployment script (one-click complete)
+./deploy-secure-local.sh
+```
+
+**🛡️ Security Features:**
+- ✅ **Local Configuration Storage** - All sensitive info saved in local `.env.local` file
+- ✅ **Environment Isolation** - Dev, test, prod environments completely separated
+- ✅ **No Cloud Leakage** - Configuration never uploaded to any repository
+- ✅ **Automated Deployment** - One-click completes all deployment steps
+- ✅ **Smart Cleanup** - Optional deletion of local sensitive files
+
+**📋 Script Features:**
+- Auto-create all Cloudflare resources
+- Auto-generate strong random keys
+- Auto-configure Workers Secrets
+- Auto-initialize database
+- Auto-deploy frontend and backend
+- Smart error handling and rollback
+
+</details>
+
+---
+
+<details>
+<summary>
+
+### Method 4: Manual Deployment (For Developers)
+
+**Best for: Advanced users who need complete control**
+
+</summary>
+
+```bash
+# 1. Clone project
+git clone https://github.com/aydomini/pebble-drive.git
+cd pebble-drive
+
+# 2. Install dependencies
+cd frontend && npm install
+cd ../backend && npm install
+
+# 3. Login to Cloudflare
+wrangler login
+
+# 4. Create resources
+wrangler r2 bucket create pebble-drive-storage
+wrangler d1 create pebble-drive-db
+wrangler kv namespace create RATE_LIMIT_KV
+wrangler kv namespace create RATE_LIMIT_KV --preview
+
+# 5. Configure backend
+cd backend
+cp wrangler.toml.example wrangler.toml
+# Edit wrangler.toml, fill in actual IDs
+
+# 6. Set secrets
+echo "your-password" | wrangler secret put AUTH_PASSWORD
+openssl rand -base64 32 | tr -d '\n' | wrangler secret put AUTH_TOKEN_SECRET
+echo "10" | wrangler secret put STORAGE_QUOTA_GB
+
+# 7. Deploy
+wrangler deploy
+cd ../frontend
+VITE_API_BASE_URL=https://your-api.workers.dev npm run build
+npx wrangler pages deploy dist --project-name=pebble-drive
+```
+
+---
+
+### 🚨 Common Issues Troubleshooting
+
+#### Issue 1: Login Failed - "Server authentication not configured"
+**Symptom**: Login fails after entering password
+**Cause**: Frontend not properly connected to backend API
+**Solution**:
+1. Check if `backend/wrangler.toml` is configured correctly
+2. Ensure Worker deployed successfully, got correct URL
+3. Frontend build must set `VITE_API_BASE_URL`
+
+#### Issue 2: Turnstile Verification Failed
+**Symptom**: CAPTCHA fails to load or verify
+**Solution**:
+1. Ensure Turnstile site created in Cloudflare Dashboard
+2. Check domain config includes your Pages domain (e.g., `your-project-name.pages.dev`)
+3. Ensure `TURNSTILE_SECRET_KEY` secret set correctly
+
+#### Issue 3: KV Namespace Creation Failed
+**Symptom**: `wrangler kv namespace create` command errors
+**Solution**:
+```bash
+# Check wrangler version
+wrangler --version
+# If version < 2.0, update
+npm install -g wrangler@latest
+
+# Re-login
+wrangler logout
+wrangler login
+```
+
+#### Issue 4: Database Initialization Failed
+**Symptom**: D1 database creation or initialization error
+**Solution**:
+```bash
+# Check if database created successfully
+wrangler d1 list
+
+# Manually execute initialization
+wrangler d1 execute pebble-drive-db --command "SELECT name FROM sqlite_master WHERE type='table';"
+```
+
+#### Issue 5: File Upload Failed
+**Symptom**: File upload reaches 100% then fails
+**Cause**: Usually R2 storage bucket configuration issue
+**Solution**:
+1. Check if R2 bucket created successfully
+2. Ensure `wrangler.toml` has correct bucket_name
+3. Check Worker has R2 write permissions
+
+---
+
+### 📞 Get Help
+
+If the above steps still don't resolve your issue:
+
+1. **View Logs**: Visit Cloudflare Dashboard → Workers → Your Worker → Logs
+2. **Check Configuration**: Run `wrangler tail --format=pretty` to view real-time logs
+3. **Submit Issue**: [GitHub Issues](https://github.com/aydomini/pebble-drive/issues)
+4. **Community Discussion**: [GitHub Discussions](https://github.com/aydomini/pebble-drive/discussions)
+
+</details>
+
+---
+
+## 🎯 Deployment Success Checklist
+
+✅ **After deployment, check the following:**
+
+- [ ] Worker deployed successfully, API endpoint accessible
+- [ ] Pages deployed successfully, frontend page loads normally
+- [ ] Login function works, password verification passes
+- [ ] Turnstile CAPTCHA displays and verifies normally
+- [ ] File upload function works properly
+- [ ] File preview function displays correctly
+- [ ] Share link function creates and accesses normally
+- [ ] All pages display properly on mobile
+
+🎉 **Congratulations! You've successfully deployed your cloud drive!**
 
 ---
 
 ## 🔧 Configuration
 
-### Environment Variables
+### Environment Variables (Secrets)
 
-| Variable | Description | Required | Default |
-|----------|-------------|----------|---------|
-| `AUTH_PASSWORD` | Login password | ✅ Required | - |
-| `AUTH_TOKEN_SECRET` | JWT secret key | ✅ Required | - |
-| `STORAGE_QUOTA_GB` | Storage quota (GB) | ❌ Optional | `∞` (unlimited) |
+Configure in Worker Settings → Variables → Environment Variables:
 
-**Notes:**
-- One-click script will auto-prompt for setup
-- For manual deployment, refer to "Manual Deployment" step 6 above
-- For local development, configure in `backend/.dev.vars`
+| Variable Name | Description | Required |
+|--------------|-------------|----------|
+| `AUTH_PASSWORD` | Login password | ✅ |
+| `AUTH_TOKEN_SECRET` | JWT secret (32-char random string) | ✅ |
+| `TURNSTILE_SECRET_KEY` | Turnstile Secret Key | ✅ |
+| `STORAGE_QUOTA_GB` | Storage quota (GB, optional) | ❌ |
 
-**Common Errors:**
-- 🚫 Login error "JSON.parse error" → Forgot to set `AUTH_PASSWORD` or `AUTH_TOKEN_SECRET`
-- 🚫 Frontend network error → Forgot to set `VITE_API_BASE_URL` during build
+### Resource Bindings
 
-### wrangler.toml Configuration
+Configure in Worker Settings → Variables:
 
-```toml
-name = "pebble-drive-api"
-main = "src/index.js"
-
-[[r2_buckets]]
-binding = "R2_BUCKET"
-bucket_name = "pebble-drive-storage"
-
-[[d1_databases]]
-binding = "DB"
-database_name = "pebble-drive-db"
-database_id = "your-database-id"  # Replace with actual value
-```
+| Type | Variable name | Bind Resource |
+|------|---------------|---------------|
+| R2 Bucket | `R2_BUCKET` | `pebble-drive-storage` |
+| D1 Database | `DB` | `pebble-drive-db` |
+| KV Namespace | `RATE_LIMIT_KV` | Your created KV namespace |
 
 ---
 
@@ -305,70 +645,39 @@ Response: {
 ## ❓ FAQ
 
 <details>
-<summary><b>Q1: Is it completely free?</b></summary>
+<summary><b>Q1: What happens when exceeding free tier?</b></summary>
 
-Yes! Cloudflare free tier includes:
-- Workers: 100,000 requests/day
-- R2: 10GB storage + zero egress fees
-- D1: 5GB database
-- Pages: Unlimited deployments
-
-Pay-as-you-go pricing beyond free tier, extremely low cost.
+Pay-as-you-go pricing, extremely low cost:
+- Workers: $0.50/million requests
+- R2: $0.015/GB storage + $0.01/GB egress
+- D1: $0.75/GB database
 </details>
 
 <details>
-<summary><b>Q2: Share link creation failed - what to do?</b></summary>
-
-**Error message**: `Failed to create share link` or `table shares has no column named password`
-
-**Cause**: Database table structure is outdated, missing columns for advanced sharing features.
-
-**Solution**: Execute database migration (see "🔄 Database Migration" section above)
-
-```bash
-cd backend
-wrangler d1 execute pebble-drive-db --file=./migrations/migrate_shares.sql --remote
-```
-
-No redeployment needed after migration. Existing share links remain valid.
-</details>
-
-<details>
-<summary><b>Q3: How to change file size limit?</b></summary>
-
-Edit `frontend/public/js/app.js`:
-```javascript
-const validFiles = files.filter(file => file.size <= 200 * 1024 * 1024); // Change to 200MB
-```
-</details>
-
-<details>
-<summary><b>Q4: What file types support preview?</b></summary>
-
-- **Images**: JPG, PNG, GIF, WebP, SVG
-- **Documents**: PDF, Markdown
-- **Code**: 40+ languages (JS/TS/Python/Go/Rust, etc.)
-- **Others**: Download supported
-</details>
-
-<details>
-<summary><b>Q5: How to change login password?</b></summary>
+<summary><b>Q2: How to change login password?</b></summary>
 
 ```bash
 cd backend
 echo "new-password" | wrangler secret put AUTH_PASSWORD
 ```
-
 No redeployment needed, takes effect immediately.
 </details>
 
 <details>
-<summary><b>Q6: How to use custom domain?</b></summary>
+<summary><b>Q3: What file types support preview?</b></summary>
 
-1. Cloudflare Dashboard → Workers → Custom Domains
-2. Add backend domain: `api.yourdomain.com`
-3. Pages → Custom Domains → Add frontend domain: `drive.yourdomain.com`
-4. Rebuild frontend:
+- **Images**: JPG, PNG, GIF, WebP, SVG
+- **Documents**: PDF, Markdown
+- **Code**: 40+ languages (JS/TS/Python/Go/Rust, etc.)
+- **Others**: TXT plain text
+</details>
+
+<details>
+<summary><b>Q4: How to use custom domain?</b></summary>
+
+1. Backend Worker: Add Custom Domain
+2. Frontend Pages: Add Custom Domain
+3. Rebuild frontend:
    ```bash
    VITE_API_BASE_URL=https://api.yourdomain.com npm run build
    npx wrangler pages deploy dist
@@ -376,17 +685,14 @@ No redeployment needed, takes effect immediately.
 </details>
 
 <details>
-<summary><b>Q7: How to backup data?</b></summary>
+<summary><b>Q5: How to backup data?</b></summary>
 
 ```bash
 # Backup database
 wrangler d1 export pebble-drive-db --output=backup.sql
 
-# List R2 files
+# Sync R2 files locally
 wrangler r2 bucket list pebble-drive-storage
-
-# Monitor logs
-wrangler tail pebble-drive-api
 ```
 </details>
 

@@ -21,3 +21,9 @@ preview_bucket_name = "pebble-drive-storage-preview"  # 本地开发使用
 binding = "DB"
 database_name = "pebble-drive-db"
 database_id = "your-database-id-here"  # 替换为你的 D1 数据库 ID
+
+# KV Namespace（速率限制存储）
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "your-kv-id-here"  # 通过 wrangler kv namespace create RATE_LIMIT_KV 创建
+preview_id = "your-preview-kv-id-here"  # 通过 wrangler kv namespace create RATE_LIMIT_KV --preview 创建
