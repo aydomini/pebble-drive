@@ -684,7 +684,46 @@ echo "new-password" | wrangler secret put AUTH_PASSWORD
 </details>
 
 <details>
-<summary><b>Q5: 如何备份数据？</b></summary>
+<summary><b>Q5: 如何配置自定义分享域名？</b></summary>
+
+**为什么需要自定义分享域名？**
+- 隐藏 Worker 的真实地址（`xxx.workers.dev`）
+- 使用自己的域名提升品牌形象
+- 增强隐私保护
+
+**配置步骤：**
+
+1. **在 Cloudflare 为 Worker 绑定自定义域名**
+   - 进入 Worker 设置页面
+   - 点击 **Triggers** → **Custom Domains**
+   - 添加你的域名（如 `storage.yourdomain.com`）
+
+2. **配置后端环境变量**
+
+   编辑 `backend/wrangler.toml`：
+   ```toml
+   [vars]
+   STORAGE_QUOTA_GB = "10"
+   SHARE_DOMAIN = "https://storage.yourdomain.com"
+   ```
+
+3. **重新部署后端**
+   ```bash
+   cd backend
+   npx wrangler deploy
+   ```
+
+**效果：**
+- 配置前：`https://pebble-drive-api.aydomini.workers.dev/share/abc123`
+- 配置后：`https://storage.yourdomain.com/share/abc123`
+
+**注意：**
+- `SHARE_DOMAIN` 配置在本地 `wrangler.toml` 中（已在 `.gitignore`，不会泄露）
+- 仓库中的 `wrangler.toml.example` 使用占位符供参考
+</details>
+
+<details>
+<summary><b>Q6: 如何备份数据？</b></summary>
 
 ```bash
 # 备份数据库

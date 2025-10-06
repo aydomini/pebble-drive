@@ -685,7 +685,46 @@ No redeployment needed, takes effect immediately.
 </details>
 
 <details>
-<summary><b>Q5: How to backup data?</b></summary>
+<summary><b>Q5: How to configure custom share domain?</b></summary>
+
+**Why use a custom share domain?**
+- Hide the real Worker address (`xxx.workers.dev`)
+- Use your own domain to enhance brand image
+- Improve privacy protection
+
+**Configuration Steps:**
+
+1. **Bind custom domain to Worker in Cloudflare**
+   - Go to Worker settings page
+   - Click **Triggers** → **Custom Domains**
+   - Add your domain (e.g., `storage.yourdomain.com`)
+
+2. **Configure backend environment variable**
+
+   Edit `backend/wrangler.toml`:
+   ```toml
+   [vars]
+   STORAGE_QUOTA_GB = "10"
+   SHARE_DOMAIN = "https://storage.yourdomain.com"
+   ```
+
+3. **Redeploy backend**
+   ```bash
+   cd backend
+   npx wrangler deploy
+   ```
+
+**Result:**
+- Before: `https://pebble-drive-api.aydomini.workers.dev/share/abc123`
+- After: `https://storage.yourdomain.com/share/abc123`
+
+**Note:**
+- `SHARE_DOMAIN` is configured in local `wrangler.toml` (in `.gitignore`, won't leak)
+- Repository's `wrangler.toml.example` uses placeholder for reference
+</details>
+
+<details>
+<summary><b>Q6: How to backup data?</b></summary>
 
 ```bash
 # Backup database

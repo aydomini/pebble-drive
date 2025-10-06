@@ -14,13 +14,47 @@ class ThemeManager {
     constructor() {
         this.theme = this.getTheme();
         this.applyTheme(this.theme);
+        this.setupSystemThemeListener();
     }
 
     /**
-     * 从 localStorage 获取主题
+     * 从 localStorage 获取主题，若未设置则自动检测系统主题
      */
     getTheme() {
-        return localStorage.getItem('pebbledrive_theme') || 'light';
+        const savedTheme = localStorage.getItem('pebbledrive_theme');
+
+        // 如果用户已经手动设置过主题，使用用户设置
+        if (savedTheme) {
+            return savedTheme;
+        }
+
+        // 否则，检测系统主题偏好
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark';
+        }
+
+        return 'light';
+    }
+
+    /**
+     * 监听系统主题变化
+     */
+    setupSystemThemeListener() {
+        if (!window.matchMedia) return;
+
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+        // 监听系统主题切换
+        mediaQuery.addEventListener('change', (e) => {
+            // 只有在用户未手动设置主题时，才自动跟随系统主题
+            const savedTheme = localStorage.getItem('pebbledrive_theme');
+            if (!savedTheme) {
+                const newTheme = e.matches ? 'dark' : 'light';
+                this.theme = newTheme;
+                this.applyTheme(newTheme);
+                console.log(`系统主题已切换为 ${newTheme} 模式`);
+            }
+        });
     }
 
     /**
@@ -130,6 +164,11 @@ class I18nManager {
                 shareSuccess: '分享链接已创建',
                 copyLink: '复制链接',
                 cancel: '取消',
+                close: '关闭',
+                shareLink: '分享链接',
+                copyLinkManually: '自动复制失败，请手动复制以下链接',
+                shareLinkCopied: '分享链接已复制到剪贴板',
+                linkCopied: '链接已复制',
                 setExpiry: '设置过期时间',
                 limitDownloads: '限制下载次数',
                 setPassword: '设置访问密码',
@@ -262,6 +301,11 @@ class I18nManager {
                 shareSuccess: 'Share link created',
                 copyLink: 'Copy Link',
                 cancel: 'Cancel',
+                close: 'Close',
+                shareLink: 'Share Link',
+                copyLinkManually: 'Auto copy failed, please copy the link manually',
+                shareLinkCopied: 'Share link copied to clipboard',
+                linkCopied: 'Link copied',
                 setExpiry: 'Set expiry time',
                 limitDownloads: 'Limit downloads',
                 setPassword: 'Set access password',
@@ -1801,11 +1845,32 @@ class PebbleDrive {
 
             const data = await response.json();
 
-            // 复制链接到剪贴板
-            await navigator.clipboard.writeText(data.shareUrl);
+            // 复制链接到剪贴板（兼容 Safari）
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(data.shareUrl);
+                } else {
+                    // 降级方案：使用传统方法
+                    const textArea = document.createElement('textarea');
+                    textArea.value = data.shareUrl;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    textArea.style.top = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                }
+            } catch (clipboardError) {
+                // 如果复制失败，显示分享链接供用户手动复制
+                console.warn('Clipboard failed:', clipboardError);
+                this.showShareLinkModal(data.shareUrl);
+                return; // 不继续执行后续的 toast 和 hideModal
+            }
 
             // 显示成功消息
-            let message = '分享链接已复制到剪贴板';
+            let message = this.i18n.t('shareLinkCopied') || '分享链接已复制到剪贴板';
             if (options.expiry) {
                 const hours = options.expiry / 3600;
                 const days = hours / 24;
@@ -1828,6 +1893,56 @@ class PebbleDrive {
         } catch (error) {
             console.error('Share error:', error);
             this.showToast('分享失败: ' + error.message, 'error');
+        }
+    }
+
+    showShareLinkModal(shareUrl) {
+        const modal = document.getElementById('fileModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalContent = document.getElementById('modalContent');
+
+        modalTitle.textContent = this.i18n.t('shareLink') || '分享链接';
+        modalContent.innerHTML = `
+            <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                ${this.i18n.t('copyLinkManually') || '自动复制失败，请手动复制以下链接'}
+            </p>
+            <div class="bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-4 mb-4">
+                <input type="text"
+                       id="shareLinkInput"
+                       value="${shareUrl}"
+                       readonly
+                       class="w-full bg-transparent text-sm text-gray-800 dark:text-gray-200 outline-none select-all"
+                       onclick="this.select()">
+            </div>
+            <div class="flex space-x-3">
+                <button onclick="app.copyShareLinkManually()"
+                        class="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    <i class="fas fa-copy mr-2"></i>${this.i18n.t('copyLink') || '复制链接'}
+                </button>
+                <button onclick="app.hideModal()"
+                        class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                    ${this.i18n.t('close') || '关闭'}
+                </button>
+            </div>
+        `;
+
+        modal.classList.remove('hidden');
+
+        // 自动选中链接
+        setTimeout(() => {
+            document.getElementById('shareLinkInput')?.select();
+        }, 100);
+    }
+
+    copyShareLinkManually() {
+        const input = document.getElementById('shareLinkInput');
+        input.select();
+        try {
+            document.execCommand('copy');
+            this.showToast(this.i18n.t('linkCopied') || '链接已复制', 'success');
+            this.hideModal();
+        } catch (err) {
+            this.showToast(this.i18n.t('copyFailed') || '复制失败，请手动选择复制', 'error');
         }
     }
 
