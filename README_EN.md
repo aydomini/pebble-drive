@@ -18,9 +18,9 @@
 - 🚀 **Serverless Architecture** - Global edge deployment with 100k requests/day free tier
 - 📦 **Triple Storage System** - R2 for files (10GB free) + D1 for metadata (5GB free) + KV for sessions & rate limiting
 - 📤 **Drag & Drop Upload** - Multi-file upload, up to 100MB per file, smart paginated list
-- 🔗 **Advanced Sharing** - Password protection, time-limited links, download count limits, access statistics
+- 🔗 **Advanced Sharing** - Password protection (SHA-256 hashing), time-limited links, download count limits, access statistics, rate limiting for brute-force prevention
 - 👁️ **Comprehensive Preview** - Support for images, PDF, Markdown, 40+ code languages, SVG (dual preview), plain text files
-- 🔐 **Enterprise-grade Security** - Multi-layer protection: IP rate limiting, account lockout, Cloudflare Turnstile verification, JWT authentication
+- 🔐 **Enterprise-grade Security** - Multi-layer protection: share password hashing, cryptographically secure random tokens, IP rate limiting (5 attempts/hour), account lockout, Cloudflare Turnstile verification, JWT authentication
 - 🌍 **Multi-language UI** - Chinese/English/Japanese adaptive switching
 - 🌓 **Dark Mode** - Adaptive theme switching with system preference support
 - 📱 **Perfectly Responsive** - Desktop/tablet/mobile full adaptation
@@ -91,7 +91,7 @@ Access Share → Rate Limit Check → Permission Verify → D1 Query → R2 Get 
 
 ---
 
-<details open>
+<details>
 <summary>
 
 ### Method 1: Cloudflare Dashboard Deployment (🌟 Easiest, Highly Recommended for Beginners)
@@ -573,18 +573,20 @@ If the above steps still don't resolve your issue:
 
 ## 🔧 Configuration
 
-### Environment Variables (Secrets)
+### Backend Configuration (Worker)
+
+#### Environment Variables (Secrets)
 
 Configure in Worker Settings → Variables → Environment Variables:
 
-| Variable Name | Description | Required |
-|--------------|-------------|----------|
-| `AUTH_PASSWORD` | Login password | ✅ |
-| `AUTH_TOKEN_SECRET` | JWT secret (32-char random string) | ✅ |
-| `TURNSTILE_SECRET_KEY` | Turnstile Secret Key | ✅ |
-| `STORAGE_QUOTA_GB` | Storage quota (GB, optional) | ❌ |
+| Variable Name | Description | Required | How to Set |
+|--------------|-------------|----------|------------|
+| `AUTH_PASSWORD` | Login password | ✅ | `wrangler secret put AUTH_PASSWORD` |
+| `AUTH_TOKEN_SECRET` | JWT secret (32-char random string) | ✅ | `openssl rand -base64 32 \| wrangler secret put AUTH_TOKEN_SECRET` |
+| `TURNSTILE_SECRET_KEY` | Turnstile Secret Key | ✅ | `wrangler secret put TURNSTILE_SECRET_KEY` |
+| `STORAGE_QUOTA_GB` | Storage quota (GB, optional) | ❌ | `echo "10" \| wrangler secret put STORAGE_QUOTA_GB` |
 
-### Resource Bindings
+#### Resource Bindings
 
 Configure in Worker Settings → Variables:
 
@@ -593,6 +595,25 @@ Configure in Worker Settings → Variables:
 | R2 Bucket | `R2_BUCKET` | `pebble-drive-storage` |
 | D1 Database | `DB` | `pebble-drive-db` |
 | KV Namespace | `RATE_LIMIT_KV` | Your created KV namespace |
+
+### Frontend Configuration (Pages)
+
+#### Build-time Environment Variables
+
+These must be set during frontend build:
+
+| Variable Name | Description | Required | Example Value |
+|--------------|-------------|----------|---------------|
+| `VITE_API_BASE_URL` | Backend API address | ✅ | `https://your-api.workers.dev` or custom domain |
+| `VITE_TURNSTILE_SITE_KEY` | Turnstile Site Key | ✅ | `0x4AAAAAAA...` |
+
+**Build Example:**
+```bash
+cd frontend
+VITE_API_BASE_URL=https://storage.yourdomain.com \
+VITE_TURNSTILE_SITE_KEY=0x4AAAAAAB5BAQH1FZZ6hsn6 \
+npm run build
+```
 
 ---
 

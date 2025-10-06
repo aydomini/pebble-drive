@@ -1,11 +1,12 @@
 /**
  * 分享处理器
  */
-import { generateShareToken } from '../utils/token.js';
+import { generateShareToken, hashPassword } from '../utils/token.js';
 import { createShareRecord, getShareRecord, incrementDownloadCount } from '../services/database.js';
 import { getFileById } from '../services/database.js';
 import { getFromR2 } from '../services/r2.js';
 import { createErrorResponse } from '../middleware/error.js';
+import { isRateLimited, recordFailedAttempt, resetRateLimit, getClientIP } from '../utils/ratelimit.js';
 
 /**
  * 生成分享链接
@@ -51,11 +52,14 @@ export async function handleShare(request, env) {
             expiresAt = new Date(Date.now() + expiry * 1000).toISOString();
         }
 
+        // 哈希密码（如果提供）
+        const hashedPassword = await hashPassword(password);
+
         // 保存分享信息到 D1
         await createShareRecord(env, {
             token: shareToken,
             fileId: fileId,
-            password: password || null,
+            password: hashedPassword,
             downloadLimit: downloadLimit || null,
             createdAt: new Date().toISOString(),
             expiresAt: expiresAt
@@ -108,19 +112,38 @@ export async function handleShareAccess(request, env, shareToken) {
 
             // POST 请求：验证密码
             if (request.method === 'POST') {
+                // 获取客户端 IP
+                const clientIP = getClientIP(request);
+
+                // 检查速率限制
+                const limited = await isRateLimited(env, shareToken, clientIP);
+                if (limited) {
+                    return new Response(JSON.stringify({ error: '尝试次数过多，请1小时后再试' }), {
+                        status: 429,
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                }
+
                 try {
                     const body = await request.json();
                     const inputPassword = body.password;
 
-                    // 验证密码
-                    if (inputPassword !== share.password) {
+                    // 哈希输入的密码并与存储的哈希值比较
+                    const inputHash = await hashPassword(inputPassword);
+                    if (inputHash !== share.password) {
+                        // 记录失败尝试
+                        await recordFailedAttempt(env, shareToken, clientIP);
+
                         return new Response(JSON.stringify({ error: '密码错误' }), {
                             status: 401,
                             headers: { 'Content-Type': 'application/json' }
                         });
                     }
 
-                    // 密码正确，继续下载流程（不要 return，让代码继续执行）
+                    // 密码正确，重置速率限制
+                    await resetRateLimit(env, shareToken, clientIP);
+
+                    // 继续下载流程（不要 return，让代码继续执行）
                 } catch (error) {
                     return new Response(JSON.stringify({ error: '请求格式错误' }), {
                         status: 400,

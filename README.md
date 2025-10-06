@@ -18,9 +18,9 @@
 - 🚀 **无服务器架构** - Cloudflare Workers 全球边缘部署，免费 10 万次请求/天
 - 📦 **三存储系统** - R2 存储文件（10GB 免费）+ D1 存储元数据（5GB 免费）+ KV 存储会话和速率限制
 - 📤 **拖拽上传** - 支持多文件上传，单文件最大 100MB，智能分页列表
-- 🔗 **高级分享** - 密码保护、限时链接、限制下载次数、访问统计
+- 🔗 **高级分享** - 密码保护（SHA-256哈希）、限时链接、限制下载次数、访问统计、速率限制防暴力破解
 - 👁️ **全能预览** - 支持图片、PDF、Markdown、40+ 种代码语言、SVG（双重预览）、纯文本
-- 🔐 **企业级安全** - 多层防护：IP 速率限制、账户锁定机制、Cloudflare Turnstile 人机验证、JWT 身份认证
+- 🔐 **企业级安全** - 多层防护：分享密码哈希存储、加密安全随机Token、IP速率限制（5次/小时）、账户锁定机制、Cloudflare Turnstile 人机验证、JWT 身份认证
 - 🌍 **多语言界面** - 中/英/日多语言自适应切换
 - 🌓 **深色模式** - 自适应主题切换，支持系统偏好
 - 📱 **完美响应式** - 桌面/平板/移动端全适配
@@ -91,7 +91,7 @@
 
 ---
 
-<details open>
+<details>
 <summary>
 
 ### 方式一：Cloudflare Dashboard 部署（🌟 最简单，强烈推荐新手）
@@ -360,6 +360,7 @@ wrangler kv namespace create RATE_LIMIT_KV --preview
 |------------|-----|----------|
 | `CLOUDFLARE_API_TOKEN` | 你的 API Token | Cloudflare Dashboard → My Profile → API Tokens |
 | `CLOUDFLARE_ACCOUNT_ID` | 你的账户 ID | Cloudflare Dashboard → 右侧边栏 |
+| `TURNSTILE_SITE_KEY` | Turnstile Site Key | 第5步创建后获取 |
 
 #### 第5步：创建 Turnstile（人机验证）
 1. 访问 [Cloudflare Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
@@ -399,6 +400,11 @@ git push
 🎉 **完成！** GitHub Actions 会自动部署到 Cloudflare，完成后：
 - 后端 API：`https://pebble-drive-api.你的账号.workers.dev`
 - 前端应用：`https://你的项目名.pages.dev`（或你的自定义域名）
+
+**📝 注意：**
+- GitHub Actions 会自动获取 Worker URL 并配置到前端
+- `TURNSTILE_SITE_KEY` 会自动注入到前端构建中
+- 无需手动配置 `VITE_API_BASE_URL` 环境变量
 
 访问前端地址即可使用！
 
@@ -573,18 +579,20 @@ wrangler d1 execute pebble-drive-db --command "SELECT name FROM sqlite_master WH
 
 ## 🔧 配置说明
 
-### 环境变量（Secrets）
+### 后端配置（Worker）
+
+#### 环境变量（Secrets）
 
 在 Worker Settings → Variables → Environment Variables 中配置：
 
-| 变量名 | 说明 | 必需 |
-|--------|------|------|
-| `AUTH_PASSWORD` | 登录密码 | ✅ |
-| `AUTH_TOKEN_SECRET` | JWT 密钥（32位随机字符串） | ✅ |
-| `TURNSTILE_SECRET_KEY` | Turnstile Secret Key | ✅ |
-| `STORAGE_QUOTA_GB` | 存储配额（GB，可选） | ❌ |
+| 变量名 | 说明 | 必需 | 设置方式 |
+|--------|------|------|---------|
+| `AUTH_PASSWORD` | 登录密码 | ✅ | `wrangler secret put AUTH_PASSWORD` |
+| `AUTH_TOKEN_SECRET` | JWT 密钥（32位随机字符串） | ✅ | `openssl rand -base64 32 \| wrangler secret put AUTH_TOKEN_SECRET` |
+| `TURNSTILE_SECRET_KEY` | Turnstile Secret Key | ✅ | `wrangler secret put TURNSTILE_SECRET_KEY` |
+| `STORAGE_QUOTA_GB` | 存储配额（GB，可选） | ❌ | `echo "10" \| wrangler secret put STORAGE_QUOTA_GB` |
 
-### 资源绑定
+#### 资源绑定
 
 在 Worker Settings → Variables 中配置：
 
@@ -593,6 +601,38 @@ wrangler d1 execute pebble-drive-db --command "SELECT name FROM sqlite_master WH
 | R2 Bucket | `R2_BUCKET` | `pebble-drive-storage` |
 | D1 Database | `DB` | `pebble-drive-db` |
 | KV Namespace | `RATE_LIMIT_KV` | 你创建的 KV 命名空间 |
+
+#### wrangler.toml 配置
+
+可选的环境变量（在 `backend/wrangler.toml` 中）：
+
+| 变量名 | 说明 | 示例值 |
+|--------|------|--------|
+| `SHARE_DOMAIN` | 自定义分享域名 | `https://storage.yourdomain.com` |
+| `STORAGE_QUOTA_GB` | 存储配额（GB） | `10` |
+
+### 前端配置（Pages）
+
+#### 构建时环境变量
+
+前端构建时必须设置以下环境变量：
+
+| 变量名 | 说明 | 必需 | 示例值 |
+|--------|------|------|--------|
+| `VITE_API_BASE_URL` | 后端 API 地址 | ✅ | `https://your-api.workers.dev` 或自定义域名 |
+| `VITE_TURNSTILE_SITE_KEY` | Turnstile Site Key | ✅ | `0x4AAAAAAA...` |
+
+**设置方式：**
+```bash
+# 本地构建
+VITE_API_BASE_URL=https://your-api.workers.dev \
+VITE_TURNSTILE_SITE_KEY=你的-site-key \
+npm run build
+
+# GitHub Actions
+# 在仓库 Settings → Secrets → Actions 中添加 TURNSTILE_SITE_KEY
+# VITE_API_BASE_URL 会自动从 Worker URL 获取
+```
 
 ---
 
@@ -677,54 +717,104 @@ echo "new-password" | wrangler secret put AUTH_PASSWORD
 </details>
 
 <details>
-<summary><b>Q4: 如何自定义域名？</b></summary>
+<summary><b>Q4: 如何配置自定义域名？</b></summary>
 
-1. Workers 后端：添加 Custom Domain
-2. Pages 前端：添加 Custom Domain
-3. 重新构建前端：
-   ```bash
-   VITE_API_BASE_URL=https://api.yourdomain.com npm run build
-   npx wrangler pages deploy dist
-   ```
+### 🌐 完整域名配置指南
+
+#### 1. 为 Worker 配置自定义域名（后端 API）
+
+**配置步骤：**
+1. 在 Cloudflare Dashboard，进入你的 Worker
+2. 点击 **Triggers** → **Custom Domains**
+3. 添加你的域名（如 `api.yourdomain.com` 或 `storage.yourdomain.com`）
+
+**重新构建前端：**
+```bash
+cd frontend
+VITE_API_BASE_URL=https://api.yourdomain.com \
+VITE_TURNSTILE_SITE_KEY=你的-site-key \
+npm run build
+
+npx wrangler pages deploy dist --project-name=pebble-drive
+```
+
+#### 2. 为 Pages 配置自定义域名（前端）
+
+1. 在 Cloudflare Dashboard，进入你的 Pages 项目
+2. 点击 **Custom domains** → **Set up a custom domain**
+3. 添加你的域名（如 `file.yourdomain.com`）
+
+#### 3. 配置自定义分享域名（可选）
+
+如果你想让分享链接使用自定义域名而不是 `xxx.workers.dev`：
+
+**编辑 `backend/wrangler.toml`：**
+```toml
+[vars]
+SHARE_DOMAIN = "https://storage.yourdomain.com"
+```
+
+**重新部署后端：**
+```bash
+cd backend
+npx wrangler deploy
+```
+
+**效果对比：**
+- 默认：`https://pebble-drive-api.xxx.workers.dev/share/abc123`
+- 配置后：`https://storage.yourdomain.com/share/abc123`
+
+#### 4. 推荐配置方案
+
+| 服务 | 推荐域名 | 说明 |
+|------|---------|------|
+| **前端 Pages** | `file.yourdomain.com` | 用户访问的主页面 |
+| **后端 Worker** | `storage.yourdomain.com` | API 和分享链接 |
+
+这样配置后：
+- 前端访问：`https://file.yourdomain.com`
+- API 调用：`https://storage.yourdomain.com/api/xxx`
+- 分享链接：`https://storage.yourdomain.com/share/xxx`
+
 </details>
 
 <details>
-<summary><b>Q5: 如何配置自定义分享域名？</b></summary>
+<summary><b>Q5: 前端连接不上后端怎么办？</b></summary>
 
-**为什么需要自定义分享域名？**
-- 隐藏 Worker 的真实地址（`xxx.workers.dev`）
-- 使用自己的域名提升品牌形象
-- 增强隐私保护
+**📌 常见问题：登录失败，显示"服务器认证未配置"**
 
-**配置步骤：**
+**根本原因：**
+前端构建时 `VITE_API_BASE_URL` 环境变量未设置或设置错误。
 
-1. **在 Cloudflare 为 Worker 绑定自定义域名**
-   - 进入 Worker 设置页面
-   - 点击 **Triggers** → **Custom Domains**
-   - 添加你的域名（如 `storage.yourdomain.com`）
+**解决方案：**
 
-2. **配置后端环境变量**
+1. **查看你的 Worker API 地址**
+   - 默认地址：`https://pebble-drive-api.你的账号.workers.dev`
+   - 自定义域名：`https://storage.yourdomain.com`（如果你配置了）
 
-   编辑 `backend/wrangler.toml`：
-   ```toml
-   [vars]
-   STORAGE_QUOTA_GB = "10"
-   SHARE_DOMAIN = "https://storage.yourdomain.com"
-   ```
-
-3. **重新部署后端**
+2. **重新构建前端（使用正确的 API 地址）**
    ```bash
-   cd backend
-   npx wrangler deploy
+   cd frontend
+   VITE_API_BASE_URL=https://你的-worker-地址 \
+   VITE_TURNSTILE_SITE_KEY=你的-turnstile-site-key \
+   npm run build
+
+   # 部署
+   npx wrangler pages deploy dist --project-name=pebble-drive
    ```
 
-**效果：**
-- 配置前：`https://pebble-drive-api.aydomini.workers.dev/share/abc123`
-- 配置后：`https://storage.yourdomain.com/share/abc123`
+3. **验证是否配置成功**
+   ```bash
+   # 检查构建产物中的 API 地址
+   cat dist/index.html | grep ENV_API_BASE_URL
+   # 应该显示：window.ENV_API_BASE_URL = 'https://你的-worker-地址';
+   ```
 
-**注意：**
-- `SHARE_DOMAIN` 配置在本地 `wrangler.toml` 中（已在 `.gitignore`，不会泄露）
-- 仓库中的 `wrangler.toml.example` 使用占位符供参考
+**📝 注意事项：**
+- 如果你为 Worker 配置了自定义域名，前端必须使用该域名
+- 每次更换 API 域名后，都需要重新构建前端
+- Dashboard 部署方式需要手动编辑 `index.html`（参考方式一的说明）
+
 </details>
 
 <details>

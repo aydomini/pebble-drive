@@ -125,9 +125,11 @@ jobs:
         cd frontend
         echo "🏗️ 构建前端..."
         echo "📡 API 地址: ${{ steps.worker-url.outputs.worker_url }}"
+        echo "🔐 Turnstile Site Key: ${TURNSTILE_SITE_KEY:0:10}..."
         npm run build
       env:
         VITE_API_BASE_URL: ${{ steps.worker-url.outputs.worker_url }}
+        VITE_TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
 
     - name: Deploy Frontend to Cloudflare Pages
       run: |
@@ -149,7 +151,18 @@ jobs:
         echo "   🔧 后端 API: ${{ steps.worker-url.outputs.worker_url }}"
         echo "   🎨 前端应用: 查看上方 Pages 部署输出获取 URL"
         echo ""
-        echo "⚠️  重要：首次部署后，请设置以下环境变量（Secrets）："
-        echo "   wrangler secret put AUTH_PASSWORD"
-        echo "   wrangler secret put AUTH_TOKEN_SECRET"
-        echo "   wrangler secret put STORAGE_QUOTA_GB"
+        echo "⚠️  重要：首次部署后，请设置以下 Secrets："
+        echo ""
+        echo "   1. Worker Secrets（后端密钥）："
+        echo "      wrangler secret put AUTH_PASSWORD"
+        echo "      wrangler secret put AUTH_TOKEN_SECRET"
+        echo "      wrangler secret put TURNSTILE_SECRET_KEY"
+        echo "      wrangler secret put STORAGE_QUOTA_GB"
+        echo ""
+        echo "   2. GitHub Secrets（前端构建）："
+        echo "      TURNSTILE_SITE_KEY - Turnstile 站点密钥"
+        echo "      （在仓库 Settings → Secrets → Actions 中添加）"
+        echo ""
+        echo "   3. 获取 Turnstile 密钥："
+        echo "      访问 https://dash.cloudflare.com/?to=/:account/turnstile"
+        echo "      创建站点后获取 Site Key 和 Secret Key"
