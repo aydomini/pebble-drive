@@ -132,9 +132,16 @@ export async function handleShareAccess(request, env, shareToken) {
                     const inputHash = await hashPassword(inputPassword);
                     if (inputHash !== share.password) {
                         // 记录失败尝试
-                        await recordFailedAttempt(env, shareToken, clientIP);
+                        const attempts = await recordFailedAttempt(env, shareToken, clientIP);
+                        const maxAttempts = 5;
+                        const remaining = Math.max(0, maxAttempts - attempts);
 
-                        return new Response(JSON.stringify({ error: '密码错误' }), {
+                        return new Response(JSON.stringify({
+                            error: '密码错误',
+                            attempts: attempts,
+                            remaining: remaining,
+                            maxAttempts: maxAttempts
+                        }), {
                             status: 401,
                             headers: { 'Content-Type': 'application/json' }
                         });
@@ -223,7 +230,9 @@ function getPasswordPage(shareToken) {
                 submitButton: '验证并访问',
                 verifying: '验证中...',
                 downloadSuccess: '下载成功！',
-                errorMessage: '密码错误，请重试',
+                errorMessage: '密码错误',
+                errorWithRemaining: '密码错误，剩余 {remaining} 次尝试机会',
+                rateLimitError: '尝试次数过多，请1小时后再试',
                 poweredBy: '由 PebbleDrive 提供安全保护'
             },
             en: {
@@ -234,7 +243,9 @@ function getPasswordPage(shareToken) {
                 submitButton: 'Verify and Access',
                 verifying: 'Verifying...',
                 downloadSuccess: 'Download successful!',
-                errorMessage: 'Incorrect password, please try again',
+                errorMessage: 'Incorrect password',
+                errorWithRemaining: 'Incorrect password. {remaining} attempts remaining',
+                rateLimitError: 'Too many attempts. Please try again in 1 hour',
                 poweredBy: 'Secured by PebbleDrive'
             }
         };
@@ -371,10 +382,43 @@ function getPasswordPage(shareToken) {
                     submitBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'dark:bg-blue-700', 'dark:hover:bg-blue-600');
                     submitBtn.classList.add('bg-green-600', 'dark:bg-green-600');
                 } else {
-                    // 密码错误
-                    throw new Error('Incorrect password');
+                    // 处理不同的错误状态
+                    let errorMessage = t('errorMessage');
+
+                    if (response.status === 429) {
+                        // 速率限制
+                        errorMessage = t('rateLimitError');
+                        submitBtn.disabled = true; // 禁用按钮
+                        errorDiv.querySelector('#errorMessage').textContent = errorMessage;
+                        errorDiv.classList.remove('hidden');
+                    } else if (response.status === 401) {
+                        // 密码错误
+                        const data = await response.json().catch(() => ({}));
+
+                        // 显示剩余次数
+                        if (data.remaining !== undefined && data.remaining > 0) {
+                            errorMessage = t('errorWithRemaining').replace('{remaining}', data.remaining);
+                        } else if (data.remaining === 0) {
+                            errorMessage = t('rateLimitError');
+                            submitBtn.disabled = true;
+                        } else {
+                            errorMessage = data.error || t('errorMessage');
+                        }
+
+                        errorDiv.querySelector('#errorMessage').textContent = errorMessage;
+                        errorDiv.classList.remove('hidden');
+
+                        if (data.remaining > 0) {
+                            submitBtn.disabled = false;
+                            submitBtnText.innerHTML = '<i class="fas fa-unlock mr-2"></i>' + t('submitButton');
+                        }
+                    } else {
+                        // 其他错误
+                        throw new Error('Request failed');
+                    }
                 }
             } catch (error) {
+                errorDiv.querySelector('#errorMessage').textContent = t('errorMessage');
                 errorDiv.classList.remove('hidden');
                 submitBtn.disabled = false;
                 submitBtnText.innerHTML = '<i class="fas fa-unlock mr-2"></i>' + t('submitButton');
