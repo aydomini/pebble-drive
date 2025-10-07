@@ -18,6 +18,7 @@
 - 🚀 **无服务器架构** - Cloudflare Workers 全球边缘部署，免费 10 万次请求/天
 - 📦 **三存储系统** - R2 存储文件（10GB 免费）+ D1 存储元数据（5GB 免费）+ KV 存储会话和速率限制
 - 📤 **拖拽上传** - 支持多文件上传，单文件最大 100MB，智能分页列表
+- 🔍 **智能文件管理** - 文件名模糊搜索、多字段排序（名称/大小/时间）、自动分页加载
 - 🔗 **高级分享** - 密码保护（SHA-256哈希）、限时链接、限制下载次数、访问统计、速率限制防暴力破解
 - 👁️ **全能预览** - 支持图片、PDF、Markdown、40+ 种代码语言、SVG（双重预览）、纯文本
 - 🔐 **企业级安全** - 多层防护：分享密码哈希存储、加密安全随机Token、IP速率限制（5次/小时）、账户锁定机制、Cloudflare Turnstile 人机验证、JWT 身份认证
@@ -48,16 +49,17 @@
 ### 技术栈
 
 **前端技术**
-- **构建工具**: Vite 5.x - 极速开发服务器和优化构建
+- **构建工具**: Vite 5.x - 极速开发服务器和优化构建，支持环境变量注入
 - **核心框架**: Vanilla JavaScript ES6+ - 零依赖，极致性能
-- **UI 框架**: TailwindCSS 3.x - 原子化 CSS，快速开发
-- **预览库**: Marked.js (Markdown)、Highlight.js (代码高亮)
+- **UI 框架**: TailwindCSS (CDN 版本) - 原子化 CSS，快速开发
+- **预览库**: Marked.js (Markdown)、Highlight.js (代码高亮，CDN 引入)
 - **图标库**: Font Awesome 6.x - 丰富图标资源
 - **国际化**: 自定义 i18n 系统
 
 **后端技术**
 - **运行时**: Cloudflare Workers (V8 引擎)
 - **存储服务**: R2 (对象存储) + D1 (SQLite) + KV (键值存储)
+- **数据库优化**: 自动索引创建、外键关联、智能分页查询 (LIMIT + OFFSET)
 - **安全认证**: JWT + Cloudflare Turnstile
 - **API 设计**: RESTful API，OpenAPI 3.0 规范
 
@@ -66,6 +68,7 @@
 - **CLI 工具**: Wrangler 2.x - Cloudflare 官方工具链
 - **监控**: Cloudflare Analytics - 实时性能监控
 - **版本控制**: Git + GitHub - 代码版本管理
+- **构建机制**: Vite 自定义插件在构建时替换环境变量占位符 (`%VITE_API_BASE_URL%` → 实际 API 地址)
 
 ---
 
@@ -695,6 +698,7 @@ Response: {
 - Workers: $0.50/百万请求
 - R2: $0.015/GB 存储 + $0.01/GB 出站
 - D1: $0.75/GB 数据库
+- KV: $0.50/GB 存储 + $0.50/百万次读 + $5.00/百万次写
 </details>
 
 <details>
@@ -840,6 +844,12 @@ MIT License - 详见 [LICENSE](LICENSE)
 ## 🙏 致谢
 
 [Cloudflare Workers](https://workers.cloudflare.com/) · [TailwindCSS](https://tailwindcss.com/) · [FontAwesome](https://fontawesome.com/) · [Vite](https://vitejs.dev/)
+
+---
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=aydomini/pebble-drive&type=Date)](https://star-history.com/#aydomini/pebble-drive&Date)
 
 ---
 

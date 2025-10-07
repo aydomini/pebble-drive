@@ -18,6 +18,7 @@
 - 🚀 **Serverless Architecture** - Global edge deployment with 100k requests/day free tier
 - 📦 **Triple Storage System** - R2 for files (10GB free) + D1 for metadata (5GB free) + KV for sessions & rate limiting
 - 📤 **Drag & Drop Upload** - Multi-file upload, up to 100MB per file, smart paginated list
+- 🔍 **Smart File Management** - Filename fuzzy search, multi-field sorting (name/size/time), auto-pagination loading
 - 🔗 **Advanced Sharing** - Password protection (SHA-256 hashing), time-limited links, download count limits, access statistics, rate limiting for brute-force prevention
 - 👁️ **Comprehensive Preview** - Support for images, PDF, Markdown, 40+ code languages, SVG (dual preview), plain text files
 - 🔐 **Enterprise-grade Security** - Multi-layer protection: share password hashing, cryptographically secure random tokens, IP rate limiting (5 attempts/hour), account lockout, Cloudflare Turnstile verification, JWT authentication
@@ -48,16 +49,17 @@ Access Share → Rate Limit Check → Permission Verify → D1 Query → R2 Get 
 ### Tech Stack
 
 **Frontend Technologies**
-- **Build Tool**: Vite 5.x - Lightning-fast dev server and optimized builds
+- **Build Tool**: Vite 5.x - Lightning-fast dev server and optimized builds with environment variable injection
 - **Core Framework**: Vanilla JavaScript ES6+ - Zero dependencies, ultimate performance
-- **UI Framework**: TailwindCSS 3.x - Atomic CSS, rapid development
-- **Preview Libraries**: Marked.js (Markdown), Highlight.js (code highlighting)
+- **UI Framework**: TailwindCSS (CDN version) - Atomic CSS, rapid development
+- **Preview Libraries**: Marked.js (Markdown), Highlight.js (code highlighting, CDN-loaded)
 - **Icon Library**: Font Awesome 6.x - Rich icon resources
 - **Internationalization**: Custom i18n system
 
 **Backend Technologies**
 - **Runtime**: Cloudflare Workers (V8 engine)
 - **Storage Services**: R2 (object storage) + D1 (SQLite) + KV (key-value storage)
+- **Database Optimization**: Auto-index creation, foreign key relations, smart pagination queries (LIMIT + OFFSET)
 - **Security Authentication**: JWT + Cloudflare Turnstile
 - **API Design**: RESTful API, OpenAPI 3.0 specification
 
@@ -66,6 +68,7 @@ Access Share → Rate Limit Check → Permission Verify → D1 Query → R2 Get 
 - **CLI Tool**: Wrangler 2.x - Official Cloudflare toolchain
 - **Monitoring**: Cloudflare Analytics - Real-time performance monitoring
 - **Version Control**: Git + GitHub - Code version management
+- **Build Mechanism**: Vite custom plugin replaces environment variable placeholders (`%VITE_API_BASE_URL%` → actual API address) during build
 
 ---
 
@@ -677,6 +680,7 @@ Pay-as-you-go pricing, extremely low cost:
 - Workers: $0.50/million requests
 - R2: $0.015/GB storage + $0.01/GB egress
 - D1: $0.75/GB database
+- KV: $0.50/GB storage + $0.50/million reads + $5.00/million writes
 </details>
 
 <details>
@@ -772,6 +776,12 @@ MIT License - See [LICENSE](LICENSE)
 ## 🙏 Credits
 
 [Cloudflare Workers](https://workers.cloudflare.com/) · [TailwindCSS](https://tailwindcss.com/) · [FontAwesome](https://fontawesome.com/) · [Vite](https://vitejs.dev/)
+
+---
+
+## ⭐ Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=aydomini/pebble-drive&type=Date)](https://star-history.com/#aydomini/pebble-drive&Date)
 
 ---
 
