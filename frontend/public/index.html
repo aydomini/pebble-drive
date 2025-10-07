@@ -189,6 +189,25 @@
         .dark #mobilePreviewArea::-webkit-scrollbar-thumb:hover {
             background: #9ca3af;
         }
+
+        /* Turnstile 验证框样式约束 */
+        #turnstile-container {
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        /* 强制 Turnstile iframe 不超出容器 */
+        #turnstile-container iframe {
+            max-width: 100% !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        /* 在小屏幕上使用 transform scale 缩放 Turnstile */
+        @media (max-width: 400px) {
+            #turnstile-container > div {
+                transform-origin: 0 0;
+                width: 300px !important; /* Turnstile normal 固定宽度 */
+            }
+        }
     </style>
     <!-- Cloudflare Turnstile -->
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
@@ -220,7 +239,10 @@
                 </div>
 
                 <!-- Turnstile 容器 (可选，需要配置 Site Key) -->
-                <div id="turnstile-container" class="hidden w-full flex justify-center"></div>
+                <!-- 添加 overflow-hidden 防止溢出，max-w-full 确保不超出父容器 -->
+                <div id="turnstile-container" class="hidden w-full overflow-hidden">
+                    <!-- Turnstile widget 将在这里渲染 -->
+                </div>
 
                 <button
                     type="submit"

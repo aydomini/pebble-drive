@@ -681,37 +681,91 @@ class PebbleDrive {
         // 清空容器内容（移除旧的 widget）
         container.innerHTML = '';
 
-        // 确保容器可见
+        // 确保容器可见（必须先移除 hidden 才能正确测量宽度）
         container.classList.remove('hidden');
 
-        try {
-            // 获取当前语言（Turnstile 支持的语言代码）
-            const langMap = {
-                'zh': 'zh-CN',  // 中文
-                'en': 'en',     // 英文
-                'ja': 'ja'      // 日文
-            };
-            const currentLang = this.i18n ? this.i18n.lang : 'zh';
-            const turnstileLang = langMap[currentLang] || 'auto';
+        // 使用 requestAnimationFrame 确保浏览器完成布局计算后再测量宽度
+        // 添加 setTimeout 作为额外保险，确保 DOM 完全渲染
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                try {
+                    // 获取当前语言（Turnstile 支持的语言代码）
+                    const langMap = {
+                        'zh': 'zh-CN',  // 中文
+                        'en': 'en',     // 英文
+                        'ja': 'ja'      // 日文
+                    };
+                    const currentLang = this.i18n ? this.i18n.lang : 'zh';
+                    const turnstileLang = langMap[currentLang] || 'auto';
 
-            // 渲染 Turnstile widget
-            // 使用 normal 尺寸以确保宽度一致（300x65px）
-            this.turnstileWidgetId = window.turnstile.render('#turnstile-container', {
-                sitekey: window.TURNSTILE_SITE_KEY,
-                theme: this.theme.theme === 'dark' ? 'dark' : 'light',
-                language: turnstileLang,
-                size: 'normal' // 使用 normal 尺寸（固定 300x65px），确保不会超出密码框宽度
-            });
-            console.log('Turnstile组件初始化成功');
-        } catch (error) {
-            console.error('Turnstile组件初始化失败:', error);
-            const loginError = document.getElementById('loginError');
-            const loginErrorText = document.getElementById('loginErrorText');
-            if (loginError && loginErrorText) {
-                loginErrorText.textContent = 'Turnstile验证组件初始化失败，请刷新页面重试';
-                loginError.classList.remove('hidden');
-            }
-        }
+                    // 获取父表单的实际宽度（更可靠）
+                    const loginForm = document.getElementById('loginForm');
+                    const formWidth = loginForm ? loginForm.offsetWidth : 0;
+                    const containerWidth = container.offsetWidth;
+                    const viewportWidth = window.innerWidth;
+
+                    console.log(`视口宽度: ${viewportWidth}px, 表单宽度: ${formWidth}px, 容器宽度: ${containerWidth}px`);
+
+                    // 混合策略：
+                    // 1. 容器宽度 >= 300px：使用 flexible 模式，自适应填充容器
+                    // 2. 容器宽度 < 300px：使用 normal 模式 + CSS 缩放
+                    let turnstileSize;
+                    let needScale = false;
+
+                    if (containerWidth >= 300) {
+                        // 大屏幕：使用 flexible 自适应
+                        turnstileSize = 'flexible';
+                        console.log(`容器宽度 ${containerWidth}px >= 300px，使用 flexible 模式`);
+                    } else {
+                        // 小屏幕：使用 normal + 缩放
+                        turnstileSize = 'normal';
+                        needScale = true;
+                        const scale = containerWidth / 300;
+                        console.log(`容器宽度 ${containerWidth}px < 300px，使用 normal 模式 + 缩放 ${scale.toFixed(2)}`);
+                        container.dataset.scale = scale.toFixed(3);
+                    }
+
+                    console.log(`选择 Turnstile 尺寸: ${turnstileSize}`);
+
+                    // 使用 block 布局
+                    container.style.display = 'block';
+
+                    // 渲染 Turnstile widget
+                    this.turnstileWidgetId = window.turnstile.render('#turnstile-container', {
+                        sitekey: window.TURNSTILE_SITE_KEY,
+                        theme: this.theme.theme === 'dark' ? 'dark' : 'light',
+                        language: turnstileLang,
+                        size: turnstileSize
+                    });
+
+                    console.log('Turnstile组件初始化成功, widgetId:', this.turnstileWidgetId);
+
+                    // 如果需要缩放，渲染后应用
+                    if (needScale && container.dataset.scale) {
+                        setTimeout(() => {
+                            const turnstileWidget = container.querySelector('div');
+                            if (turnstileWidget) {
+                                const scale = parseFloat(container.dataset.scale);
+                                turnstileWidget.style.transform = `scale(${scale})`;
+                                turnstileWidget.style.transformOrigin = '0 0';
+                                // 调整容器高度以适应缩放后的内容
+                                const originalHeight = 65; // normal 模式高度
+                                container.style.height = `${originalHeight * scale}px`;
+                                console.log(`已应用缩放 ${scale}，容器高度调整为 ${originalHeight * scale}px`);
+                            }
+                        }, 100); // 等待 Turnstile 完全渲染
+                    }
+                } catch (error) {
+                    console.error('Turnstile组件初始化失败:', error);
+                    const loginError = document.getElementById('loginError');
+                    const loginErrorText = document.getElementById('loginErrorText');
+                    if (loginError && loginErrorText) {
+                        loginErrorText.textContent = 'Turnstile验证组件初始化失败，请刷新页面重试';
+                        loginError.classList.remove('hidden');
+                    }
+                }
+            }, 50); // 等待 50ms 确保 DOM 完全渲染
+        });
     }
 
     /**
