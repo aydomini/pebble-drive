@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+# package-lock.json  # 注释掉，允许提交以支持 npm ci
+
+# Build output
+dist/
+.output/
+.vercel/
+.netlify/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.turnstile
+.dev.vars
+
+# Wrangler
+.wrangler/
+.mf/
+
+# Wrangler config with secrets (use wrangler.toml.example instead)
+# Prevent committing personal database_id and other sensitive info
+backend/wrangler.toml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+
+# Claude collaboration memory (local development notes)
+claude.md

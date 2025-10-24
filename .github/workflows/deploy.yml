@@ -1,0 +1,168 @@
+name: Deploy PebbleDrive
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    name: Deploy Backend (Workers)
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Backend Dependencies
+      run: |
+        cd backend
+        npm ci
+
+    - name: Verify Backend Configuration
+      run: |
+        cd backend
+        echo "🔍 验证后端配置..."
+
+        # Copy example config if wrangler.toml doesn't exist
+        if [ ! -f wrangler.toml ]; then
+          echo "📋 从示例配置创建 wrangler.toml..."
+          cp wrangler.toml.example wrangler.toml
+        fi
+
+        # Get database ID dynamically from Cloudflare
+        echo "🔍 获取数据库 ID..."
+        DB_ID=$(npx wrangler d1 list | grep pebble-drive-db | awk '{print $2}' || echo "")
+
+        if [ -z "$DB_ID" ]; then
+          echo "⚠️ 未找到数据库，将在部署时创建"
+        else
+          echo "✅ 找到数据库 ID: $DB_ID"
+          # Update wrangler.toml with real database_id (works on both Linux and macOS)
+          if [[ "$OSTYPE" == "darwin"* ]]; then
+            sed -i '' "s/database_id = \"your-database-id\"/database_id = \"$DB_ID\"/" wrangler.toml
+          else
+            sed -i "s/database_id = \"your-database-id\"/database_id = \"$DB_ID\"/" wrangler.toml
+          fi
+        fi
+
+        echo "✅ 后端配置验证通过"
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    - name: Deploy Backend to Cloudflare Workers
+      run: |
+        cd backend
+        echo "🚀 部署后端到 Cloudflare Workers..."
+        npx wrangler deploy
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    - name: Initialize Database
+      run: |
+        cd backend
+        echo "🗃️ 初始化数据库表结构..."
+        npx wrangler d1 execute pebble-drive-db --file=./migrations/schema.sql || echo "数据库表已存在或初始化失败（可能已存在）"
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    - name: Backend Deployment Success
+      run: |
+        echo "✅ 后端部署成功！"
+        echo "🌐 Worker 已部署，URL 将在下一步获取"
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    name: Deploy Frontend (Pages)
+    needs: deploy-backend
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm ci
+
+    - name: Get Worker URL
+      id: worker-url
+      run: |
+        cd backend
+        # 从 wrangler.toml 获取 worker 名称
+        WORKER_NAME=$(grep '^name = ' wrangler.toml | sed 's/name = "\(.*\)"/\1/')
+        # 获取 Cloudflare 账户的子域名
+        SUBDOMAIN=$(npx wrangler whoami 2>/dev/null | grep 'subdomain' | awk '{print $2}' || echo "")
+
+        if [ -n "$SUBDOMAIN" ]; then
+          WORKER_URL="https://${WORKER_NAME}.${SUBDOMAIN}.workers.dev"
+        else
+          # 回退：使用默认格式
+          WORKER_URL="https://${WORKER_NAME}.workers.dev"
+        fi
+
+        echo "worker_url=${WORKER_URL}" >> $GITHUB_OUTPUT
+        echo "✅ Worker URL: ${WORKER_URL}"
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    - name: Build Frontend
+      run: |
+        cd frontend
+        echo "🏗️ 构建前端..."
+        echo "📡 API 地址: ${{ steps.worker-url.outputs.worker_url }}"
+        echo "🔐 Turnstile Site Key: ${TURNSTILE_SITE_KEY:0:10}..."
+        npm run build
+      env:
+        VITE_API_BASE_URL: ${{ steps.worker-url.outputs.worker_url }}
+        VITE_TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
+
+    - name: Deploy Frontend to Cloudflare Pages
+      run: |
+        cd frontend
+        echo "🚀 部署前端到 Cloudflare Pages..."
+        # 从环境变量获取项目名，默认为 pebble-drive
+        PROJECT_NAME="${PAGES_PROJECT_NAME:-pebble-drive}"
+        npx wrangler pages deploy dist --project-name=$PROJECT_NAME
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        PAGES_PROJECT_NAME: ${{ secrets.PAGES_PROJECT_NAME }}
+
+    - name: Deployment Complete
+      run: |
+        echo "🎉 PebbleDrive 完整部署成功！"
+        echo ""
+        echo "📋 部署信息："
+        echo "   🔧 后端 API: ${{ steps.worker-url.outputs.worker_url }}"
+        echo "   🎨 前端应用: 查看上方 Pages 部署输出获取 URL"
+        echo ""
+        echo "⚠️  重要：首次部署后，请设置以下 Secrets："
+        echo ""
+        echo "   1. Worker Secrets（后端密钥）："
+        echo "      wrangler secret put AUTH_PASSWORD"
+        echo "      wrangler secret put AUTH_TOKEN_SECRET"
+        echo "      wrangler secret put TURNSTILE_SECRET_KEY"
+        echo "      wrangler secret put STORAGE_QUOTA_GB"
+        echo ""
+        echo "   2. GitHub Secrets（前端构建）："
+        echo "      TURNSTILE_SITE_KEY - Turnstile 站点密钥"
+        echo "      （在仓库 Settings → Secrets → Actions 中添加）"
+        echo ""
+        echo "   3. 获取 Turnstile 密钥："
+        echo "      访问 https://dash.cloudflare.com/?to=/:account/turnstile"
+        echo "      创建站点后获取 Site Key 和 Secret Key"

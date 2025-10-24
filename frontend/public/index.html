@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PebbleDrive - 轻量级云存储</title>
+    <script>
+        // 隐藏 Vite 开发服务器的连接日志
+        (function() {
+            const originalLog = console.log;
+            console.log = function(...args) {
+                // 过滤掉 Vite 的连接消息
+                const message = args[0];
+                if (typeof message === 'string' && (
+                    message.includes('[vite] connecting') ||
+                    message.includes('[vite] connected')
+                )) {
+                    return; // 不输出
+                }
+                originalLog.apply(console, args);
+            };
+        })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Tailwind CDN 配置
+        tailwind.config = {
+            darkMode: 'class'
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Markdown 解析库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 代码高亮库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" id="hljs-light">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" id="hljs-dark" disabled>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <style>
+        /* 夜间主题变量 */
+        :root {
+            --bg-primary: #f9fafb;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f3f4f6;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        .dark {
+            --bg-primary: #111827;
+            --bg-secondary: #1f2937;
+            --bg-tertiary: #374151;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --border-color: #4b5563;
+            --shadow: rgba(0, 0, 0, 0.3);
+        }
+
+        /* 基础样式使用 CSS 变量 */
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .drag-area {
+            border: 2px dashed #cbd5e1;
+            transition: all 0.3s ease;
+        }
+        .drag-area.dragover {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        .dark .drag-area.dragover {
+            background-color: #1e3a8a;
+        }
+        .file-item {
+            transition: all 0.2s ease;
+        }
+        .file-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+        .progress-bar {
+            transition: width 0.3s ease;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+
+        /* Markdown 和代码预览样式 */
+        .markdown-preview {
+            line-height: 1.6;
+        }
+        .markdown-preview h1 { font-size: 2em; font-weight: bold; margin-top: 0.5em; margin-bottom: 0.5em; }
+        .markdown-preview h2 { font-size: 1.5em; font-weight: bold; margin-top: 0.5em; margin-bottom: 0.5em; }
+        .markdown-preview h3 { font-size: 1.25em; font-weight: bold; margin-top: 0.5em; margin-bottom: 0.5em; }
+        .markdown-preview p { margin-bottom: 1em; }
+        .markdown-preview ul, .markdown-preview ol { margin-left: 2em; margin-bottom: 1em; }
+        .markdown-preview li { margin-bottom: 0.25em; }
+        .markdown-preview code { background-color: #f3f4f6; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
+        .markdown-preview pre { background-color: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: auto; margin-bottom: 1em; }
+        .dark .markdown-preview code { background-color: #374151; color: #e5e7eb; }
+        .dark .markdown-preview pre { background-color: #1f2937; }
+        .markdown-preview pre code { background-color: transparent; padding: 0; }
+        .markdown-preview blockquote { border-left: 4px solid #e5e7eb; padding-left: 1em; margin-left: 0; color: #6b7280; }
+        .dark .markdown-preview blockquote { border-left-color: #4b5563; color: #9ca3af; }
+        .markdown-preview a { color: #2563eb; text-decoration: underline; }
+        .dark .markdown-preview a { color: #60a5fa; }
+        .markdown-preview table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+        .markdown-preview th, .markdown-preview td { border: 1px solid #e5e7eb; padding: 0.5em; }
+        .dark .markdown-preview th, .dark .markdown-preview td { border-color: #4b5563; }
+        .markdown-preview th { background-color: #f9fafb; font-weight: bold; }
+        .dark .markdown-preview th { background-color: #374151; }
+
+        /* 自定义滚动条样式（支持夜间模式） */
+        /* Webkit 浏览器 (Chrome, Safari, Edge) */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* 夜间模式滚动条 */
+        .dark ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+        }
+        .dark ::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        /* Firefox 滚动条 */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 #f1f5f9;
+        }
+        .dark * {
+            scrollbar-color: #4b5563 #1f2937;
+        }
+
+        /* 预览区域专用滚动条样式（更明显） */
+        #previewArea::-webkit-scrollbar,
+        #mobilePreviewArea::-webkit-scrollbar {
+            width: 10px;
+        }
+        #previewArea::-webkit-scrollbar-track,
+        #mobilePreviewArea::-webkit-scrollbar-track {
+            background: #e5e7eb;
+            border-radius: 5px;
+        }
+        #previewArea::-webkit-scrollbar-thumb,
+        #mobilePreviewArea::-webkit-scrollbar-thumb {
+            background: #9ca3af;
+            border-radius: 5px;
+        }
+        #previewArea::-webkit-scrollbar-thumb:hover,
+        #mobilePreviewArea::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        /* 夜间模式预览区域滚动条 */
+        .dark #previewArea::-webkit-scrollbar-track,
+        .dark #mobilePreviewArea::-webkit-scrollbar-track {
+            background: #374151;
+        }
+        .dark #previewArea::-webkit-scrollbar-thumb,
+        .dark #mobilePreviewArea::-webkit-scrollbar-thumb {
+            background: #6b7280;
+        }
+        .dark #previewArea::-webkit-scrollbar-thumb:hover,
+        .dark #mobilePreviewArea::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+
+        /* Turnstile 验证框样式约束 */
+        #turnstile-container {
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        /* 强制 Turnstile iframe 不超出容器 */
+        #turnstile-container iframe {
+            max-width: 100% !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        /* 在小屏幕上使用 transform scale 缩放 Turnstile */
+        @media (max-width: 400px) {
+            #turnstile-container > div {
+                transform-origin: 0 0;
+                width: 300px !important; /* Turnstile normal 固定宽度 */
+            }
+        }
+    </style>
+    <!-- Cloudflare Turnstile -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen flex flex-col transition-colors">
+    <!-- 登录界面（默认显示） -->
+    <div id="loginScreen" class="flex-1 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md transition-colors">
+            <div class="text-center mb-8">
+                <i class="fas fa-cloud text-blue-600 dark:text-blue-400 text-5xl mb-4"></i>
+                <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-2" data-i18n="appTitle">PebbleDrive</h1>
+                <p class="text-gray-600 dark:text-gray-300" data-i18n="appSubtitle">轻量级云存储</p>
+            </div>
+
+            <form id="loginForm" class="space-y-6">
+                <div>
+                    <label for="loginPassword" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        <i class="fas fa-lock mr-1"></i><span data-i18n="accessPassword">访问密码</span>
+                    </label>
+                    <input
+                        type="password"
+                        id="loginPassword"
+                        class="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-100 transition"
+                        placeholder="请输入访问密码"
+                        data-i18n-placeholder="passwordPlaceholder"
+                        required
+                        autocomplete="current-password"
+                    >
+                </div>
+
+                <!-- Turnstile 容器 (可选，需要配置 Site Key) -->
+                <!-- 添加 overflow-hidden 防止溢出，max-w-full 确保不超出父容器 -->
+                <div id="turnstile-container" class="hidden w-full overflow-hidden">
+                    <!-- Turnstile widget 将在这里渲染 -->
+                </div>
+
+                <button
+                    type="submit"
+                    id="loginBtn"
+                    class="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition flex items-center justify-center"
+                >
+                    <i class="fas fa-sign-in-alt mr-2"></i>
+                    <span id="loginBtnText" data-i18n="loginBtn">登录</span>
+                </button>
+
+                <div id="loginError" class="hidden bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm border border-red-200 dark:border-red-800">
+                    <i class="fas fa-exclamation-circle mr-2"></i>
+                    <span id="loginErrorText"></span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 主应用界面（登录后显示） -->
+    <div id="appScreen" class="flex-1 flex flex-col" style="display: none;">
+    <header class="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700 transition-colors">
+        <div class="max-w-7xl mx-auto px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-cloud text-blue-600 dark:text-blue-400 text-2xl"></i>
+                    <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100" data-i18n="appTitle">PebbleDrive</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <!-- 语言切换按钮 -->
+                    <button id="langToggle" class="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition" data-i18n-title="langToggle" title="切换语言">
+                        <span class="text-sm font-semibold">中/EN</span>
+                    </button>
+                    <!-- 主题切换按钮 -->
+                    <button id="themeToggle" class="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition" data-i18n-title="themeToggle" title="切换主题">
+                        <i class="fas fa-moon dark-icon"></i>
+                        <i class="fas fa-sun light-icon hidden"></i>
+                    </button>
+                    <button id="logoutBtn" class="text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400 transition" data-i18n-title="logout" title="登出">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex items-center justify-center py-2 px-4 sm:px-6 md:px-8 overflow-auto min-h-0">
+        <div class="w-full max-w-md sm:max-w-2xl md:max-w-5xl mx-auto">
+            <!-- 卡片式布局：桌面端左右布局，移动端上下布局 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 h-[85vh] p-2 -m-2">
+                <!-- 左侧列/上方区域：上传卡片 + 文件列表卡片 -->
+                <div class="md:col-span-1 flex flex-col gap-4 sm:gap-6 md:gap-8 h-full min-h-0">
+                    <!-- 上传卡片 (移动端1/3高度，桌面端1/3高度) -->
+                    <div class="flex-[1] md:flex-[1] bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col min-h-0 transition-colors">
+                        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                            <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                <i class="fas fa-cloud-upload-alt mr-1 text-xs"></i><span data-i18n="upload">上传文件</span>
+                            </h2>
+                        </div>
+                        <div class="flex-1 flex flex-col items-center justify-center p-3 min-h-0 overflow-auto">
+                            <div id="dragArea" class="drag-area flex flex-col items-center justify-center py-4 px-3 text-center w-full h-full min-h-[80px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+                                <i class="fas fa-upload text-base text-gray-400 dark:text-gray-500 mb-0.5"></i>
+                                <h3 class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5" data-i18n="uploadArea">点击或拖拽</h3>
+                                <p class="text-gray-500 dark:text-gray-400 text-[9px]" data-i18n="uploadHint">最大 100MB</p>
+                                <input type="file" id="fileInput" multiple class="hidden">
+                            </div>
+
+                            <!-- 上传进度列表 -->
+                            <div id="uploadProgress" class="hidden w-full mt-2 space-y-1">
+                                <div id="progressList"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 文件列表卡片 (移动端2/3高度，桌面端2/3高度) -->
+                    <div class="flex-[2] md:flex-[2] bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col min-h-0 max-h-full transition-colors">
+                        <!-- 标题栏：与上传卡片样式统一 -->
+                        <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
+                            <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                                <i class="fas fa-folder mr-1 text-xs"></i><span data-i18n="myFiles">我的文件</span>
+                            </h2>
+                            <span id="storageInfo" class="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:inline">
+                                <i class="fas fa-database text-[9px]"></i>
+                                <span id="storageUsed">0 KB</span>/<span id="storageTotal">10 GB</span>
+                            </span>
+                        </div>
+                        <!-- 文件列表区域 -->
+                        <div class="flex-1 flex flex-col min-h-0">
+                            <!-- 搜索和排序工具栏 -->
+                            <div class="px-4 py-2 bg-white dark:bg-gray-800 flex-shrink-0">
+                                <div class="flex items-center gap-2">
+                                    <input type="text" id="searchInput" placeholder="搜索..." data-i18n-placeholder="searchPlaceholder"
+                                           class="flex-1 min-w-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs leading-tight focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100 dark:placeholder-gray-400 h-[26px]">
+                                    <select id="sortBy" class="flex-shrink-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs leading-tight focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:text-gray-100 h-[26px]">
+                                        <option value="name" data-i18n="sortByName">名称</option>
+                                        <option value="size" data-i18n="sortBySize">大小</option>
+                                        <option value="date" data-i18n="sortByDate">日期</option>
+                                    </select>
+                                    <button id="refreshBtn" class="flex-shrink-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-xs leading-tight bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-1 focus:ring-blue-500 transition h-[26px]">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- 文件列表 -->
+                            <div id="fileList" class="flex-1 overflow-y-auto min-h-0">
+                                <!-- 文件列表将在这里动态生成 -->
+                                <div id="emptyState" class="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
+                                    <i class="fas fa-folder-open text-3xl mb-2"></i>
+                                    <p class="text-xs" data-i18n="emptyState">暂无文件，拖拽或选择文件开始上传</p>
+                                </div>
+                            </div>
+                            <!-- 分页控件 -->
+                            <div id="paginationContainer" class="px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+                                <!-- 分页将在这里动态生成 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧/隐藏区域：文件预览卡片（桌面端显示，移动端隐藏，通过模态框显示） -->
+                <div class="hidden md:flex md:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex-col min-h-0 transition-colors">
+                    <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                        <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">
+                            <i class="fas fa-eye mr-1 text-xs"></i><span data-i18n="preview">文件预览</span>
+                        </h2>
+                    </div>
+                    <div id="previewArea" class="flex-1 overflow-y-auto p-6 min-h-0">
+                        <div class="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
+                            <i class="fas fa-file-alt text-4xl mb-3"></i>
+                            <p class="text-sm" data-i18n="selectFileToPreview">选择文件查看预览</p>
+                            <p class="text-xs mt-1" data-i18n="supportedFormats">支持图片、PDF、Markdown、代码等格式</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 移动端文件预览模态框 -->
+    <div id="mobilePreviewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 md:hidden flex items-center justify-center p-8">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl h-[80vh] max-h-[80vh] flex flex-col overflow-hidden">
+            <!-- 顶部导航栏 -->
+            <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
+                <button id="closeMobilePreview" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+                <h3 class="text-sm font-semibold text-gray-800 dark:text-gray-100" data-i18n="preview">文件预览</h3>
+                <div class="w-6"></div>
+            </div>
+            <!-- 预览内容 -->
+            <div id="mobilePreviewArea" class="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
+        </div>
+    </div>
+
+    <!-- 文件操作模态框 -->
+    <div id="fileModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div class="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 id="modalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">文件信息</h3>
+                    <button id="closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div id="modalContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast" class="fixed top-20 left-1/2 transform -translate-x-1/2 hidden z-50">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 flex items-center space-x-3 border border-gray-200 dark:border-gray-700">
+            <i id="toastIcon" class="fas fa-check-circle text-green-500"></i>
+            <span id="toastMessage" class="text-gray-800 dark:text-gray-100"></span>
+        </div>
+    </div>
+    </div><!-- 关闭 appScreen -->
+
+    <script>
+        // API base URL - 通过环境变量注入或使用默认值
+        // 生产环境：需要在构建时设置 VITE_API_BASE_URL 环境变量
+        // 开发环境：使用 vite.config.js 中配置的代理
+        window.ENV_API_BASE_URL = '%VITE_API_BASE_URL%';
+
+        // Turnstile Site Key - 通过环境变量注入
+        // 注意：此变量会被 app.js 中的 window.TURNSTILE_SITE_KEY 使用
+        window.VITE_TURNSTILE_SITE_KEY = '%VITE_TURNSTILE_SITE_KEY%';
+    </script>
+    <script src="js/app.js"></script>
+</body>
+</html>
