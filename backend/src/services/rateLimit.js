@@ -166,3 +166,177 @@ export function getClientIP(request) {
            request.headers.get('X-Forwarded-For')?.split(',')[0] ||
            '0.0.0.0';
 }
+
+/**
+ * ===============================================
+ * 上传速率限制功能（新增）
+ * ===============================================
+ */
+
+/**
+ * 检查上传速率限制
+ * @param {Object} env - Cloudflare Workers 环境变量
+ * @param {string} clientIP - 客户端 IP 地址
+ * @param {Object} config - 配置对象
+ * @returns {Promise<Object>} { allowed: boolean, currentCount: number, retryAfter: number }
+ */
+export async function checkUploadRateLimit(env, clientIP, config) {
+    const key = `upload:rate:${clientIP}`;
+    const now = Math.floor(Date.now() / 1000); // 当前时间戳（秒）
+
+    try {
+        // 从 KV 获取当前计数
+        const data = await env.RATE_LIMIT_KV.get(key, { type: 'json' });
+
+        if (!data) {
+            // 首次上传，允许
+            return {
+                allowed: true,
+                currentCount: 0,
+                retryAfter: 0
+            };
+        }
+
+        const { count, windowStart } = data;
+        const windowEnd = windowStart + config.uploadRateWindow;
+
+        // 检查窗口是否已过期
+        if (now >= windowEnd) {
+            // 窗口已过期，重置计数
+            return {
+                allowed: true,
+                currentCount: 0,
+                retryAfter: 0
+            };
+        }
+
+        // 检查是否超过限制
+        if (count >= config.uploadRateLimit) {
+            const retryAfter = windowEnd - now;
+            return {
+                allowed: false,
+                currentCount: count,
+                retryAfter: retryAfter
+            };
+        }
+
+        // 未超过限制
+        return {
+            allowed: true,
+            currentCount: count,
+            retryAfter: 0
+        };
+
+    } catch (error) {
+        console.error('速率限制检查失败：', error);
+        // 出错时允许上传（避免误拦截）
+        return {
+            allowed: true,
+            currentCount: 0,
+            retryAfter: 0
+        };
+    }
+}
+
+/**
+ * 增加上传计数
+ * @param {Object} env - Cloudflare Workers 环境变量
+ * @param {string} clientIP - 客户端 IP 地址
+ * @param {Object} config - 配置对象
+ */
+export async function incrementUploadCount(env, clientIP, config) {
+    const key = `upload:rate:${clientIP}`;
+    const now = Math.floor(Date.now() / 1000);
+
+    try {
+        const data = await env.RATE_LIMIT_KV.get(key, { type: 'json' });
+
+        let newData;
+        if (!data) {
+            // 首次上传
+            newData = {
+                count: 1,
+                windowStart: now
+            };
+        } else {
+            const { count, windowStart } = data;
+            const windowEnd = windowStart + config.uploadRateWindow;
+
+            if (now >= windowEnd) {
+                // 窗口已过期，重置
+                newData = {
+                    count: 1,
+                    windowStart: now
+                };
+            } else {
+                // 增加计数
+                newData = {
+                    count: count + 1,
+                    windowStart: windowStart
+                };
+            }
+        }
+
+        // 保存到 KV，设置过期时间为窗口结束时间
+        const ttl = config.uploadRateWindow + 60; // 额外 60 秒缓冲
+        await env.RATE_LIMIT_KV.put(key, JSON.stringify(newData), {
+            expirationTtl: ttl
+        });
+
+    } catch (error) {
+        console.error('速率限制计数失败：', error);
+        // 出错时不影响上传流程
+    }
+}
+
+/**
+ * 重置指定 IP 的上传计数（管理功能）
+ * @param {Object} env - Cloudflare Workers 环境变量
+ * @param {string} clientIP - 客户端 IP 地址
+ */
+export async function resetUploadCount(env, clientIP) {
+    const key = `upload:rate:${clientIP}`;
+    try {
+        await env.RATE_LIMIT_KV.delete(key);
+        return { success: true };
+    } catch (error) {
+        console.error('重置速率限制失败：', error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * 获取指定 IP 的上传统计信息（管理功能）
+ * @param {Object} env - Cloudflare Workers 环境变量
+ * @param {string} clientIP - 客户端 IP 地址
+ * @param {Object} config - 配置对象
+ * @returns {Promise<Object>} 统计信息
+ */
+export async function getUploadStats(env, clientIP, config) {
+    const key = `upload:rate:${clientIP}`;
+    try {
+        const data = await env.RATE_LIMIT_KV.get(key, { type: 'json' });
+        if (!data) {
+            return {
+                count: 0,
+                windowStart: null,
+                windowEnd: null,
+                remaining: config.uploadRateLimit
+            };
+        }
+
+        const { count, windowStart } = data;
+        const windowEnd = windowStart + config.uploadRateWindow;
+
+        return {
+            count,
+            windowStart,
+            windowEnd,
+            remaining: Math.max(0, windowEnd - Math.floor(Date.now() / 1000)),
+            limit: config.uploadRateLimit
+        };
+    } catch (error) {
+        console.error('获取上传统计失败：', error);
+        return null;
+    }
+}

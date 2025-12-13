@@ -1,0 +1,29 @@
+{
+  "name": "pebble-drive",
+  "version": "1.0.0",
+  "description": "基于 Cloudflare 的轻量级云存储系统",
+  "scripts": {
+    "deploy": "node scripts/deploy.js",
+    "upgrade": "node scripts/upgrade.js",
+    "dev:backend": "cd backend && npx wrangler dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "check": "node scripts/check.js",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "clean": "rm -rf backend/node_modules frontend/node_modules node_modules"
+  },
+  "keywords": [
+    "cloudflare",
+    "storage",
+    "file-sharing",
+    "workers",
+    "r2",
+    "d1"
+  ],
+  "author": "PebbleDrive",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aydomini/pebble-drive.git"
+  }
+}

@@ -9,6 +9,22 @@ export default defineConfig({
         {
           src: 'js/*',  // Relative to root (public)
           dest: 'js'
+        },
+        {
+          src: '*.png',  // 复制所有 PNG 图标到根目录
+          dest: '.'
+        },
+        {
+          src: 'logo.svg',  // 复制 SVG logo 到根目录
+          dest: '.'
+        },
+        {
+          src: 'manifest.json',  // 复制 manifest 到根目录
+          dest: '.'
+        },
+        {
+          src: 'service-worker.js',  // 复制 service worker 到根目录
+          dest: '.'
         }
       ]
     }),

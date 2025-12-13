@@ -1,4 +1,10 @@
 /**
+ * 应用版本信息
+ */
+const APP_VERSION = '1.3.0';
+const GITHUB_REPO_URL = 'https://github.com/aydomini/pebble-drive';
+
+/**
  * Cloudflare Turnstile 配置
  * 启用 Turnstile 人机验证保护
  * 配置方法：见 README 安全配置章节
@@ -6,6 +12,254 @@
  * 注意：Turnstile 验证为必需的安全组件
  */
 window.TURNSTILE_SITE_KEY = window.VITE_TURNSTILE_SITE_KEY || ''; // 从 index.html 中注入
+
+/**
+ * 分片上传类（极简 KV 版本）
+ * 支持大文件上传（最大 5GB），每个分片最大 50MB
+ * KV 操作：仅 3 次（初始化 1 PUT + 完成 1 GET + 1 DELETE）
+ */
+class ChunkedUploader {
+    constructor(file, apiEndpoint, token, i18n) {
+        this.file = file;
+        this.apiEndpoint = apiEndpoint;
+        this.token = token;
+        this.i18n = i18n; // 添加 i18n 支持
+        this.CHUNK_SIZE = 50 * 1024 * 1024; // 50MB 每块
+        this.totalChunks = Math.ceil(file.size / this.CHUNK_SIZE);
+        this.uploadedParts = []; // 前端维护已上传的分片
+        this.onProgress = null; // 进度回调
+        this.canceled = false; // 取消标志
+        this.currentXhr = null; // 当前的上传请求
+        this.uploadId = null; // 上传会话 ID（用于中止）
+        this.fileId = null; // 文件 ID（用于中止）
+    }
+
+    /**
+     * 取消上传
+     */
+    async cancel() {
+        this.canceled = true;
+
+        // 中止当前的 XHR 请求
+        if (this.currentXhr) {
+            this.currentXhr.abort();
+        }
+
+        // 调用后端 API 清理 R2 和 KV 资源
+        if (this.uploadId && this.fileId) {
+            try {
+                const response = await fetch(`${this.apiEndpoint}/upload/abort`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.token}`
+                    },
+                    body: JSON.stringify({
+                        uploadId: this.uploadId,
+                        fileId: this.fileId
+                    })
+                });
+
+                if (response.ok) {
+                    console.log(`[分片上传] R2 资源已清理 - uploadId: ${this.uploadId}`);
+                } else {
+                    console.warn(`[分片上传] 清理失败，但上传已取消 - uploadId: ${this.uploadId}`);
+                }
+            } catch (error) {
+                console.warn(`[分片上传] 无法连接到服务器清理资源: ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * 开始上传
+     */
+    async upload() {
+        try {
+            // 步骤1：初始化分片上传
+            console.log(`[${this.i18n.t('chunkedUploadStart')}] ${this.file.name} - ${(this.file.size / 1024 / 1024).toFixed(2)}MB, ${this.totalChunks} chunks`);
+            const { uploadId, fileId } = await this.initUpload();
+
+            // 保存 uploadId 和 fileId（用于取消时中止上传）
+            this.uploadId = uploadId;
+            this.fileId = fileId;
+
+            // 步骤2：上传所有分片
+            for (let i = 0; i < this.totalChunks; i++) {
+                // 检查是否已取消
+                if (this.canceled) {
+                    throw new Error(this.i18n.t('uploadCanceled') || '上传已取消');
+                }
+
+                const chunk = this.getChunk(i);
+                const { etag, partNumber } = await this.uploadChunk(
+                    chunk, uploadId, fileId, i + 1
+                );
+
+                // 前端维护状态（不依赖后端 KV）
+                this.uploadedParts.push({ partNumber, etag });
+
+                // 保存到 localStorage（断点续传支持）
+                this.saveProgress(uploadId, fileId);
+
+                // 更新进度
+                const progress = ((i + 1) / this.totalChunks * 100).toFixed(1);
+                if (this.onProgress) {
+                    this.onProgress({
+                        uploaded: i + 1,
+                        total: this.totalChunks,
+                        percent: progress
+                    });
+                }
+
+                console.log(`[${this.i18n.t('chunkedUploadProgress')}] ${i + 1}/${this.totalChunks} (${progress}%)`);
+            }
+
+            // 步骤3：完成上传
+            console.log(`[${this.i18n.t('chunkedUploadMerging')}]`);
+            const result = await this.completeUpload(uploadId, fileId, this.uploadedParts);
+
+            // 清理 localStorage
+            this.clearProgress(uploadId);
+
+            console.log(`[${this.i18n.t('chunkedUploadSuccess')}] ${fileId}`);
+            return result;
+
+        } catch (error) {
+            console.error(`[${this.i18n.t('chunkedUploadFailed')}]`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * 获取指定索引的分片
+     */
+    getChunk(index) {
+        const start = index * this.CHUNK_SIZE;
+        const end = Math.min(start + this.CHUNK_SIZE, this.file.size);
+        return this.file.slice(start, end);
+    }
+
+    /**
+     * 初始化分片上传
+     */
+    async initUpload() {
+        const response = await fetch(`${this.apiEndpoint}/upload/init`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.token}`
+            },
+            body: JSON.stringify({
+                fileName: this.file.name,
+                fileSize: this.file.size,
+                fileType: this.file.type,
+                totalChunks: this.totalChunks
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || this.i18n.t('chunkedInitFailed'));
+        }
+
+        return response.json();
+    }
+
+    /**
+     * 上传单个分片（使用 XMLHttpRequest 以支持取消）
+     */
+    async uploadChunk(chunk, uploadId, fileId, partNumber) {
+        return new Promise((resolve, reject) => {
+            const formData = new FormData();
+            formData.append('chunk', chunk);
+            formData.append('uploadId', uploadId);
+            formData.append('fileId', fileId);
+            formData.append('partNumber', partNumber);
+
+            const xhr = new XMLHttpRequest();
+            this.currentXhr = xhr; // 保存当前请求
+
+            xhr.open('POST', `${this.apiEndpoint}/upload/chunk`);
+            xhr.setRequestHeader('Authorization', `Bearer ${this.token}`);
+
+            xhr.onload = () => {
+                this.currentXhr = null;
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try {
+                        const result = JSON.parse(xhr.responseText);
+                        resolve(result);
+                    } catch (error) {
+                        reject(new Error(this.i18n.t('chunkedPartFailed').replace('{partNumber}', partNumber)));
+                    }
+                } else {
+                    reject(new Error(this.i18n.t('chunkedPartFailed').replace('{partNumber}', partNumber)));
+                }
+            };
+
+            xhr.onerror = () => {
+                this.currentXhr = null;
+                reject(new Error(this.i18n.t('chunkedPartFailed').replace('{partNumber}', partNumber)));
+            };
+
+            xhr.onabort = () => {
+                this.currentXhr = null;
+                reject(new Error(this.i18n.t('uploadCanceled') || '上传已取消'));
+            };
+
+            xhr.send(formData);
+        });
+    }
+
+    /**
+     * 完成分片上传
+     */
+    async completeUpload(uploadId, fileId, parts) {
+        const response = await fetch(`${this.apiEndpoint}/upload/complete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${this.token}`
+            },
+            body: JSON.stringify({ uploadId, fileId, parts })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || this.i18n.t('chunkedCompleteFailed'));
+        }
+
+        return response.json();
+    }
+
+    /**
+     * 保存上传进度到 localStorage（断点续传）
+     */
+    saveProgress(uploadId, fileId) {
+        try {
+            localStorage.setItem(`upload:${uploadId}`, JSON.stringify({
+                fileId,
+                fileName: this.file.name,
+                fileSize: this.file.size,
+                uploadedParts: this.uploadedParts,
+                lastUpdate: Date.now()
+            }));
+        } catch (e) {
+            console.warn('无法保存上传进度:', e);
+        }
+    }
+
+    /**
+     * 清理上传进度
+     */
+    clearProgress(uploadId) {
+        try {
+            localStorage.removeItem(`upload:${uploadId}`);
+        } catch (e) {
+            console.warn('无法清理上传进度:', e);
+        }
+    }
+}
 
 /**
  * 主题管理类
@@ -189,12 +443,26 @@ class I18nManager {
                 // 提示信息
                 uploadSuccess: '上传成功',
                 uploadFailed: '上传失败',
+                uploadCanceled: '上传已取消',
+                cancelUpload: '取消上传',
                 deleteConfirm: '确定要删除这个文件吗？',
                 deleteSuccess: '删除成功',
                 deleteFailed: '删除失败',
+                copy: '复制',
                 copySuccess: '已复制到剪贴板',
                 copyFailed: '复制失败',
                 refreshSuccess: '文件列表已刷新',
+
+                // 上传限制提示（新增）
+                fileTypeNotAllowed: '以下文件类型不允许上传：',
+                fileSizeExceeded: '以下文件超过大小限制：',
+                fileInfo: '（{size}，超过限制 {maxSize}）',
+                noFilesSelected: '未选择任何文件',
+                uploadConfigLoaded: '上传配置已加载',
+                maxFileSize: '最大文件大小',
+                blockedTypes: '禁止上传',
+                rateLimit: '上传限制',
+                perHour: '次/小时',
 
                 // 文件预览
                 closePreview: '关闭预览',
@@ -254,7 +522,21 @@ class I18nManager {
                 loggingIn: '登录中...',
                 loginBlocked: '登录已锁定，请 {seconds} 秒后重试',
                 loginBlockedInitial: '密码错误次数过多，已锁定 {seconds} 秒',
-                remainingAttempts: '剩余尝试次数'
+                remainingAttempts: '剩余尝试次数',
+
+                // 分片上传
+                chunkedUploadStart: '开始上传',
+                chunkedUploadProgress: '进度',
+                chunkedUploadMerging: '所有分片上传完成，开始合并...',
+                chunkedUploadSuccess: '上传成功',
+                chunkedUploadFailed: '上传失败',
+                chunkedUploadUsing: '文件大小：{size}MB，使用分片上传',
+                chunkedInitFailed: '初始化失败',
+                chunkedPartFailed: '分片 {partNumber} 上传失败',
+                chunkedCompleteFailed: '完成上传失败',
+
+                // 上传进度
+                uploadProgressTitle: '上传进度'
             },
             en: {
                 // Login screen
@@ -326,12 +608,26 @@ class I18nManager {
                 // Messages
                 uploadSuccess: 'Upload successful',
                 uploadFailed: 'Upload failed',
+                uploadCanceled: 'Upload canceled',
+                cancelUpload: 'Cancel upload',
                 deleteConfirm: 'Are you sure you want to delete this file?',
                 deleteSuccess: 'Deleted successfully',
                 deleteFailed: 'Delete failed',
+                copy: 'Copy',
                 copySuccess: 'Copied to clipboard',
                 copyFailed: 'Copy failed',
                 refreshSuccess: 'File list refreshed',
+
+                // Upload limits (new)
+                fileTypeNotAllowed: 'The following file types are not allowed:',
+                fileSizeExceeded: 'The following files exceed the size limit:',
+                fileInfo: '({size}, exceeds limit {maxSize})',
+                noFilesSelected: 'No files selected',
+                uploadConfigLoaded: 'Upload configuration loaded',
+                maxFileSize: 'Max file size',
+                blockedTypes: 'Blocked types',
+                rateLimit: 'Upload limit',
+                perHour: 'times/hour',
 
                 // File preview
                 closePreview: 'Close Preview',
@@ -391,7 +687,21 @@ class I18nManager {
                 loggingIn: 'Logging in...',
                 loginBlocked: 'Login locked, please try again in {seconds} seconds',
                 loginBlockedInitial: 'Too many failed attempts, locked for {seconds} seconds',
-                remainingAttempts: 'Remaining attempts'
+                remainingAttempts: 'Remaining attempts',
+
+                // Chunked Upload
+                chunkedUploadStart: 'Upload started',
+                chunkedUploadProgress: 'Progress',
+                chunkedUploadMerging: 'All chunks uploaded, merging...',
+                chunkedUploadSuccess: 'Upload successful',
+                chunkedUploadFailed: 'Upload failed',
+                chunkedUploadUsing: 'File size: {size}MB, using chunked upload',
+                chunkedInitFailed: 'Initialization failed',
+                chunkedPartFailed: 'Chunk {partNumber} upload failed',
+                chunkedCompleteFailed: 'Failed to complete upload',
+
+                // 上传进度
+                uploadProgressTitle: 'Upload Progress'
             }
         };
         // 延迟应用语言，确保 DOM 已加载
@@ -450,11 +760,8 @@ class I18nManager {
         const newLang = this.lang === 'zh' ? 'en' : 'zh';
         this.setLang(newLang);
         this.applyLanguage(newLang);
-        // 更新语言切换按钮文本
-        const langToggle = document.getElementById('langToggle');
-        if (langToggle) {
-            langToggle.innerHTML = `<span class="text-sm font-semibold">${newLang === 'zh' ? '中/EN' : 'EN/中'}</span>`;
-        }
+        // 语言切换按钮保持图标样式（不需要更新内容）
+        // 图标样式通用于所有语言，无需动态修改
     }
 }
 
@@ -563,6 +870,22 @@ class PebbleDrive {
     constructor() {
         this.files = [];
         this.selectedFileId = null; // 当前选中的文件ID
+        this.activeUploads = new Map(); // 保存正在上传的对象 (fileName -> {xhr|uploader, type})
+
+        // 上传限制配置（从后端获取）
+        this.uploadConfig = {
+            maxFileSizeMB: 100, // 默认值
+            maxFileSizeBytes: 100 * 1024 * 1024,
+            storageQuotaGB: 10,
+            blockedExtensions: ['.exe', '.sh', '.bat', '.cmd'],
+            uploadRateLimit: 50,
+            uploadRateWindow: 3600,
+            hints: {
+                maxFileSize: '最大文件大小：100MB',
+                blockedTypes: '禁止上传：.exe, .sh, .bat, .cmd',
+                rateLimit: '上传限制：50 次/60 分钟'
+            }
+        };
 
         // 分页状态
         this.pagination = {
@@ -605,11 +928,32 @@ class PebbleDrive {
     }
 
     init() {
+        // 设置版本号链接
+        this.setupVersionLinks();
+
         // 检查是否已登录
         if (!this.auth.isAuthenticated()) {
             this.showLoginScreen();
         } else {
             this.showAppScreen();
+        }
+    }
+
+    /**
+     * 设置版本号链接
+     */
+    setupVersionLinks() {
+        const loginVersionLink = document.getElementById('loginVersionLink');
+        const appVersionLink = document.getElementById('appVersionLink');
+
+        if (loginVersionLink) {
+            loginVersionLink.href = GITHUB_REPO_URL;
+            loginVersionLink.textContent = `v${APP_VERSION}`;
+        }
+
+        if (appVersionLink) {
+            appVersionLink.href = GITHUB_REPO_URL;
+            appVersionLink.textContent = `v${APP_VERSION}`;
         }
     }
 
@@ -809,9 +1153,13 @@ class PebbleDrive {
     /**
      * 显示主应用界面
      */
-    showAppScreen() {
+    async showAppScreen() {
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('appScreen').style.display = 'flex';
+
+        // 加载上传配置（优先级最高，影响文件上传逻辑）
+        await this.loadUploadConfig();
+
         this.setupEventListeners();
         this.loadFiles();
         this.updateStorageInfo();
@@ -922,9 +1270,11 @@ class PebbleDrive {
         dragArea.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', this.handleFileSelect.bind(this));
 
-        // 刷新按钮
-        refreshBtn.addEventListener('click', () => {
-            this.loadFiles();
+        // 刷新按钮（同时刷新文件列表、配置和存储信息）
+        refreshBtn.addEventListener('click', async () => {
+            await this.loadUploadConfig(); // 重新加载上传配置
+            this.loadFiles(); // 重新加载文件列表
+            this.updateStorageInfo(); // 更新存储信息
             this.showToast(this.i18n.t('refreshSuccess'), 'success');
         });
 
@@ -964,6 +1314,14 @@ class PebbleDrive {
                 this.i18n.toggle();
                 // 重新渲染文件列表以更新界面文本
                 this.filterFiles();
+                // 更新上传提示（使用后端配置的动态值）
+                this.updateUploadHints();
+                // 更新上传进度条的按钮文本
+                this.updateUploadProgressTitles();
+                // 重新渲染当前预览的文件（如果有选中的文件）
+                if (this.selectedFileId) {
+                    this.showFilePreview(this.selectedFileId);
+                }
                 // 如果在登录界面，更新 Turnstile 语言
                 if (!this.auth.isAuthenticated() && this.turnstileWidgetId !== null) {
                     this.initTurnstile();
@@ -1028,6 +1386,66 @@ class PebbleDrive {
         }
     }
 
+    /**
+     * 加载上传限制配置（从后端获取）
+     */
+    async loadUploadConfig() {
+        try {
+            const response = await fetch(`${this.apiEndpoint}/config/limits`);
+
+            if (response.ok) {
+                const config = await response.json();
+                this.uploadConfig = config;
+                console.log('上传配置已加载：', config);
+
+                // 更新上传区域的提示信息
+                this.updateUploadHints();
+            } else {
+                console.warn('加载配置失败，使用默认配置');
+            }
+        } catch (error) {
+            console.error('加载配置错误：', error);
+            // 使用构造函数中的默认配置
+        }
+    }
+
+    /**
+     * 更新上传区域的提示信息（支持多语言）
+     */
+    updateUploadHints() {
+        const dragArea = document.getElementById('dragArea');
+        if (!dragArea) return;
+
+        // 使用 data-i18n 属性精确匹配提示元素
+        const hint = dragArea.querySelector('[data-i18n="uploadHint"]');
+        if (hint) {
+            // 根据当前语言更新文字
+            const maxSizeMB = this.uploadConfig.maxFileSizeMB;
+            if (this.i18n.lang === 'zh') {
+                hint.textContent = `最大 ${maxSizeMB}MB`;
+            } else {
+                hint.textContent = `Max ${maxSizeMB}MB`;
+            }
+        }
+    }
+
+    /**
+     * 更新上传进度条按钮的多语言文本
+     */
+    updateUploadProgressTitles() {
+        // 更新所有取消按钮的 title
+        const cancelButtons = document.querySelectorAll('.cancel-upload-btn');
+        cancelButtons.forEach(btn => {
+            btn.title = this.i18n.t('cancelUpload') || '取消上传';
+        });
+
+        // 更新所有关闭失败按钮的 title
+        const closeButtons = document.querySelectorAll('.close-failed-btn');
+        closeButtons.forEach(btn => {
+            btn.title = this.i18n.t('close') || '关闭';
+        });
+    }
+
     setupMobilePreview() {
         const closeMobilePreview = document.getElementById('closeMobilePreview');
         if (closeMobilePreview) {
@@ -1065,18 +1483,72 @@ class PebbleDrive {
     }
 
     async uploadFiles(files) {
-        const validFiles = files.filter(file => file.size <= 100 * 1024 * 1024); // 100MB限制
+        // 使用动态配置进行验证
+        const maxSize = this.uploadConfig.maxFileSizeBytes;
+        const blockedExtensions = this.uploadConfig.blockedExtensions;
 
-        if (validFiles.length !== files.length) {
-            this.showToast('部分文件超过100MB限制，已自动过滤', 'warning');
+        // 分类文件：有效、超大、禁止类型
+        const validFiles = [];
+        const oversizedFiles = [];
+        const blockedFiles = [];
+
+        files.forEach(file => {
+            const fileName = file.name.toLowerCase();
+            const extension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+
+            // 检查文件类型
+            if (blockedExtensions.includes(extension)) {
+                blockedFiles.push({ name: file.name, reason: `${this.i18n.t('blockedTypes')}（${extension}）` });
+                return;
+            }
+
+            // 检查文件大小
+            if (file.size > maxSize) {
+                oversizedFiles.push({
+                    name: file.name,
+                    size: this.formatFileSize(file.size),
+                    maxSize: this.formatFileSize(maxSize)
+                });
+                return;
+            }
+
+            validFiles.push(file);
+        });
+
+        // 显示友好的错误提示
+        if (blockedFiles.length > 0) {
+            const names = blockedFiles.map(f => f.name).join(', ');
+            this.showToast(
+                `${this.i18n.t('fileTypeNotAllowed')}${names}`,
+                'error'
+            );
         }
 
-        if (validFiles.length === 0) return;
+        if (oversizedFiles.length > 0) {
+            const details = oversizedFiles.map(f =>
+                `${f.name}${this.i18n.t('fileInfo').replace('{size}', f.size).replace('{maxSize}', f.maxSize)}`
+            ).join(', ');
+            this.showToast(
+                `${this.i18n.t('fileSizeExceeded')}${details}`,
+                'warning'
+            );
+        }
 
+        // 没有有效文件
+        if (validFiles.length === 0) {
+            if (blockedFiles.length === 0 && oversizedFiles.length === 0) {
+                this.showToast(this.i18n.t('noFilesSelected'), 'info');
+            }
+            return;
+        }
+
+        // 上传有效文件（批量并行上传，每批最多3个文件）
         this.showUploadProgress(validFiles);
 
-        for (const file of validFiles) {
-            await this.uploadFile(file);
+        const CONCURRENT_UPLOADS = 3; // 最多同时上传3个文件
+        for (let i = 0; i < validFiles.length; i += CONCURRENT_UPLOADS) {
+            const batch = validFiles.slice(i, i + CONCURRENT_UPLOADS);
+            await Promise.all(batch.map(file => this.uploadFile(file)));
         }
 
         setTimeout(() => {
@@ -1099,22 +1571,137 @@ class PebbleDrive {
             progressItem.innerHTML = `
                 <div class="flex items-center justify-between mb-0.5">
                     <span class="text-[10px] font-medium text-gray-700 dark:text-gray-200 truncate flex-1">${file.name}</span>
-                    <span class="text-[9px] text-gray-500 dark:text-gray-400 ml-1">${this.formatFileSize(file.size)}</span>
+                    <div class="flex items-center gap-1 ml-1">
+                        <span class="text-[9px] text-gray-500 dark:text-gray-400">${this.formatFileSize(file.size)}</span>
+                        <button class="cancel-upload-btn text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs"
+                                data-file-name="${file.name}"
+                                title="${this.i18n.t('cancelUpload') || '取消上传'}"
+                                style="display: inline-flex; padding: 2px; min-width: 16px;">
+                            ✕
+                        </button>
+                    </div>
                 </div>
                 <div class="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-1">
                     <div class="progress-bar bg-blue-600 dark:bg-blue-500 h-1 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
             `;
             progressList.appendChild(progressItem);
+
+            // 为取消按钮添加事件监听器
+            const cancelBtn = progressItem.querySelector('.cancel-upload-btn');
+            cancelBtn.addEventListener('click', () => {
+                this.cancelUpload(file.name);
+            });
         });
     }
 
+    /**
+     * 取消上传
+     */
+    cancelUpload(fileName) {
+        const uploadInfo = this.activeUploads.get(fileName);
+        if (!uploadInfo) {
+            return;
+        }
+
+        // 根据类型取消上传
+        if (uploadInfo.type === 'xhr') {
+            // 普通上传（< 100MB）
+            uploadInfo.xhr.abort();
+        } else if (uploadInfo.type === 'chunked') {
+            // 分片上传（>= 100MB）
+            uploadInfo.uploader.cancel();
+        }
+
+        // 从 Map 中移除
+        this.activeUploads.delete(fileName);
+
+        // 移除进度条 UI
+        const progressItem = document.querySelector(`[data-file-upload="${fileName}"]`);
+        if (progressItem) {
+            progressItem.remove();
+        }
+
+        // 提示用户
+        this.showToast(`${fileName} ${this.i18n.t('uploadCanceled') || '上传已取消'}`, 'warning');
+
+        // 如果没有正在上传的文件了，隐藏进度容器
+        if (this.activeUploads.size === 0) {
+            const progressContainer = document.getElementById('uploadProgress');
+            progressContainer.classList.add('hidden');
+        }
+    }
+
+    /**
+     * 标记上传为失败状态
+     * @param {string} fileName - 文件名
+     */
+    markUploadAsFailed(fileName) {
+        const progressItem = document.querySelector(`[data-file-upload="${fileName}"]`);
+        if (!progressItem) {
+            return;
+        }
+
+        // 更新背景色为红色
+        progressItem.className = 'bg-red-50 dark:bg-red-900/20 rounded p-1.5 mb-1 border border-red-200 dark:border-red-800';
+
+        // 更新进度条为红色
+        const progressBar = progressItem.querySelector('.progress-bar');
+        if (progressBar) {
+            progressBar.className = 'progress-bar bg-red-500 dark:bg-red-600 h-1 rounded-full';
+        }
+
+        // 将取消按钮改为关闭按钮
+        const cancelBtn = progressItem.querySelector('.cancel-upload-btn');
+        if (cancelBtn) {
+            // 更新按钮样式和提示
+            cancelBtn.title = this.i18n.t('close') || '关闭';
+            cancelBtn.className = 'close-failed-btn text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 text-xs';
+
+            // 移除旧的事件监听器（通过替换元素）
+            const newBtn = cancelBtn.cloneNode(true);
+            cancelBtn.parentNode.replaceChild(newBtn, cancelBtn);
+
+            // 添加新的关闭事件
+            newBtn.addEventListener('click', () => {
+                progressItem.remove();
+
+                // 检查是否还有进度条
+                const progressList = document.getElementById('progressList');
+                if (progressList && progressList.children.length === 0) {
+                    const progressContainer = document.getElementById('uploadProgress');
+                    progressContainer.classList.add('hidden');
+                }
+            });
+        }
+
+        // 添加失败图标
+        const sizeSpan = progressItem.querySelector('.text-\\[9px\\]');
+        if (sizeSpan) {
+            sizeSpan.insertAdjacentHTML('afterend',
+                '<span class="text-[9px] text-red-600 dark:text-red-400 ml-1">✗ ' + this.i18n.t('uploadFailed') + '</span>'
+            );
+        }
+    }
+
     async uploadFile(file) {
+        // 判断是否需要使用分片上传（>= 100MB）
+        const CHUNKED_UPLOAD_THRESHOLD = 100 * 1024 * 1024; // 100MB
+
+        if (file.size >= CHUNKED_UPLOAD_THRESHOLD) {
+            // 使用分片上传
+            return this.uploadFileChunked(file);
+        }
+
+        // 使用普通上传（< 100MB）
         const formData = new FormData();
         formData.append('file', file);
 
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
+
+            // 保存到 activeUploads（用于取消）
+            this.activeUploads.set(file.name, { xhr, type: 'xhr' });
 
             // 监听上传进度
             xhr.upload.addEventListener('progress', (e) => {
@@ -1133,6 +1720,9 @@ class PebbleDrive {
 
             // 上传完成
             xhr.addEventListener('load', () => {
+                // 从 activeUploads 中移除
+                this.activeUploads.delete(file.name);
+
                 if (xhr.status >= 200 && xhr.status < 300) {
                     try {
                         const fileInfo = JSON.parse(xhr.responseText);
@@ -1144,27 +1734,36 @@ class PebbleDrive {
                     } catch (error) {
                         console.error('Parse response error:', error);
                         this.showToast(`${this.i18n.t('uploadFailed')}: ${error.message}`, 'error');
+                        this.markUploadAsFailed(file.name); // 标记为失败
                         reject(error);
                     }
                 } else {
                     const errorMsg = this.i18n.t('uploadFailed');
                     this.showToast(`${file.name} ${errorMsg}`, 'error');
+                    this.markUploadAsFailed(file.name); // 标记为失败
                     reject(new Error(errorMsg));
                 }
             });
 
             // 上传失败
             xhr.addEventListener('error', () => {
+                // 从 activeUploads 中移除
+                this.activeUploads.delete(file.name);
+
                 const errorMsg = this.i18n.t('uploadFailed');
                 console.error('Upload error:', file.name);
                 this.showToast(`${file.name} ${errorMsg}`, 'error');
+                this.markUploadAsFailed(file.name); // 标记为失败
                 reject(new Error(errorMsg));
             });
 
             // 上传取消
             xhr.addEventListener('abort', () => {
+                // 从 activeUploads 中移除
+                this.activeUploads.delete(file.name);
+
                 const errorMsg = this.i18n.t('uploadCanceled') || '上传已取消';
-                this.showToast(`${file.name} ${errorMsg}`, 'warning');
+                // 取消时不显示 toast（在 cancelUpload 中已显示）
                 reject(new Error(errorMsg));
             });
 
@@ -1178,6 +1777,67 @@ class PebbleDrive {
 
             xhr.send(formData);
         });
+    }
+
+    /**
+     * 分片上传大文件（>= 100MB）
+     */
+    async uploadFileChunked(file) {
+        try {
+            // 创建分片上传器（传入 i18n 支持）
+            const uploader = new ChunkedUploader(
+                file,
+                this.apiEndpoint,
+                this.auth.getToken(),
+                this.i18n // 添加 i18n 支持
+            );
+
+            // 保存到 activeUploads（用于取消）
+            this.activeUploads.set(file.name, { uploader, type: 'chunked' });
+
+            // 设置进度回调
+            uploader.onProgress = ({ uploaded, total, percent }) => {
+                // 更新进度条
+                const progressItem = document.querySelector(`[data-file-upload="${file.name}"]`);
+                if (progressItem) {
+                    const progressBar = progressItem.querySelector('.progress-bar');
+                    if (progressBar) {
+                        progressBar.style.width = percent + '%';
+                    }
+                }
+
+                // 显示分片进度
+                console.log(`[${this.i18n.t('chunkedUploadProgress')}] ${file.name}: ${uploaded}/${total} (${percent}%)`);
+            };
+
+            // 开始上传
+            const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+            console.log(this.i18n.t('chunkedUploadUsing').replace('{size}', sizeMB));
+            const result = await uploader.upload();
+
+            // 从 activeUploads 中移除（上传成功）
+            this.activeUploads.delete(file.name);
+
+            // 上传成功
+            this.files.push(result);
+            this.showToast(`${file.name} ${this.i18n.t('uploadSuccess')}`, 'success');
+            this.renderFileList();
+            this.updateStorageInfo();
+
+            return result;
+
+        } catch (error) {
+            // 从 activeUploads 中移除（上传失败）
+            this.activeUploads.delete(file.name);
+
+            // 如果是取消错误，不显示toast（在 cancelUpload 中已显示）
+            if (!error.message.includes('取消') && !error.message.includes('canceled')) {
+                console.error(`[${this.i18n.t('chunkedUploadFailed')}]`, error);
+                this.showToast(`${file.name} ${this.i18n.t('uploadFailed')}: ${error.message}`, 'error');
+                this.markUploadAsFailed(file.name); // 标记为失败
+            }
+            throw error;
+        }
     }
 
     async loadFiles() {
@@ -1329,22 +1989,30 @@ class PebbleDrive {
         if (isSVG) {
             // SVG 文件预览 - 同时显示渲染效果和代码
             previewHTML = `
-                <div class="w-full h-full flex flex-col">
-                    <div class="flex-1 flex flex-col gap-3 overflow-auto">
+                <div class="flex-1 flex flex-col min-h-0 relative">
+                    <!-- 可滚动的预览内容区域 -->
+                    <div class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col gap-3">
                         <!-- SVG 渲染预览 -->
                         <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-4 flex items-center justify-center" style="min-height: 200px;">
                             <img class="svgImage-${file.id} max-w-full max-h-64 object-contain"
                                  alt="${file.name}">
                         </div>
-                        <!-- SVG 代码预览 -->
-                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 flex-1">
+                        <!-- SVG 代码预览（带复制按钮） -->
+                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 relative">
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">${this.i18n.t('svgSource')}</span>
                             </div>
-                            <pre class="overflow-auto" style="max-height: 300px;"><code class="svgPreview-${file.id} language-xml text-xs">${this.i18n.t('loading')}</code></pre>
+                            <!-- 复制按钮：初始隐藏，内容加载完成后显示 -->
+                            <button onclick="app.copyTextToClipboard('.svgPreview-${file.id}')"
+                                    class="copy-btn-${file.id} absolute top-11 right-5 w-8 h-8 flex items-center justify-center bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 rounded-lg shadow-lg transition-all z-20 border border-gray-200 dark:border-gray-600 opacity-0 pointer-events-none"
+                                    title="${this.i18n.t('copy')}">
+                                <i class="fas fa-copy text-sm"></i>
+                            </button>
+                            <pre class="whitespace-pre-wrap break-words"><code class="svgPreview-${file.id} language-xml text-xs">${this.i18n.t('loading')}</code></pre>
                         </div>
                     </div>
-                    <div class="mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg flex-shrink-0">
+                    <!-- 固定的信息和按钮区域 -->
+                    <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <div>
@@ -1398,6 +2066,13 @@ class PebbleDrive {
                         el.textContent = text;
                         hljs.highlightElement(el);
                     });
+
+                    // 显示复制按钮（淡入效果）
+                    const copyBtns = document.querySelectorAll(`.copy-btn-${file.id}`);
+                    copyBtns.forEach(btn => {
+                        btn.classList.remove('opacity-0', 'pointer-events-none');
+                        btn.classList.add('opacity-100');
+                    });
                 } catch (error) {
                     const previewElements = document.querySelectorAll(`.svgPreview-${file.id}`);
                     previewElements.forEach(el => {
@@ -1407,12 +2082,14 @@ class PebbleDrive {
             }, 0);
         } else if (isImage) {
             previewHTML = `
-                <div class="w-full h-full flex flex-col">
-                    <div class="flex-1 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg p-2">
+                <div class="flex-1 flex flex-col min-h-0">
+                    <!-- 可滚动的预览内容区域 -->
+                    <div class="flex-1 overflow-y-auto min-h-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 rounded-lg p-2">
                         <img class="imagePreview-${file.id} max-w-full max-h-full object-contain rounded-lg shadow-lg"
                              alt="${file.name}">
                     </div>
-                    <div class="mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                    <!-- 固定的信息和按钮区域 -->
+                    <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <div>
@@ -1454,12 +2131,14 @@ class PebbleDrive {
             }, 0);
         } else if (isPDF) {
             previewHTML = `
-                <div class="w-full h-full flex flex-col">
-                    <div class="flex-1 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
+                <div class="flex-1 flex flex-col min-h-0">
+                    <!-- 可滚动的预览内容区域 -->
+                    <div class="flex-1 overflow-y-auto min-h-0 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden">
                         <iframe class="pdfPreview-${file.id} w-full h-full"
                                 frameborder="0"></iframe>
                     </div>
-                    <div class="mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                    <!-- 固定的信息和按钮区域 -->
+                    <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <div>
@@ -1502,11 +2181,21 @@ class PebbleDrive {
         } else if (isMarkdown) {
             // Markdown文件预览 - 异步加载并渲染
             previewHTML = `
-                <div class="w-full h-full flex flex-col">
-                    <div class="flex-1 bg-white dark:bg-gray-800 rounded-lg overflow-hidden p-4">
-                        <div class="markdown-preview markdownPreview-${file.id} text-sm text-gray-800 dark:text-gray-100 h-full overflow-auto">${this.i18n.t('loading')}</div>
+                <div class="flex-1 flex flex-col min-h-0 relative">
+                    <!-- 复制按钮：固定在外层容器右上角，不随滚动移动 -->
+                    <button onclick="app.copyTextToClipboard('.markdownRaw-${file.id}')"
+                            class="copy-btn-${file.id} absolute top-6 right-6 w-8 h-8 flex items-center justify-center bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 rounded-lg shadow-lg transition-all z-20 border border-gray-200 dark:border-gray-600 opacity-0 pointer-events-none"
+                            title="${this.i18n.t('copy')}">
+                        <i class="fas fa-copy text-sm"></i>
+                    </button>
+                    <!-- 可滚动的预览内容区域 -->
+                    <div class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-white dark:bg-gray-800 rounded-lg p-4">
+                        <!-- 隐藏的原始文本存储 -->
+                        <div class="markdownRaw-${file.id}" style="display: none;"></div>
+                        <div class="markdown-preview markdownPreview-${file.id} text-sm text-gray-800 dark:text-gray-100">${this.i18n.t('loading')}</div>
                     </div>
-                    <div class="mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                    <!-- 固定的信息和按钮区域 -->
+                    <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <div>
@@ -1545,6 +2234,13 @@ class PebbleDrive {
                         }
                     });
                     const text = await response.text();
+
+                    // 保存原始文本到隐藏元素（用于复制）
+                    const rawElements = document.querySelectorAll(`.markdownRaw-${file.id}`);
+                    rawElements.forEach(el => {
+                        el.textContent = text;
+                    });
+
                     // 使用 marked 库渲染 Markdown
                     const html = marked.parse(text);
                     const previewElements = document.querySelectorAll(`.markdownPreview-${file.id}`);
@@ -1554,6 +2250,13 @@ class PebbleDrive {
                         el.querySelectorAll('pre code').forEach((block) => {
                             hljs.highlightElement(block);
                         });
+                    });
+
+                    // 显示复制按钮（淡入效果）
+                    const copyBtns = document.querySelectorAll(`.copy-btn-${file.id}`);
+                    copyBtns.forEach(btn => {
+                        btn.classList.remove('opacity-0', 'pointer-events-none');
+                        btn.classList.add('opacity-100');
                     });
                 } catch (error) {
                     const previewElements = document.querySelectorAll(`.markdownPreview-${file.id}`);
@@ -1566,11 +2269,19 @@ class PebbleDrive {
             // 代码文件预览 - 异步加载并高亮
             const language = this.getCodeLanguage(file.name);
             previewHTML = `
-                <div class="w-full h-full flex flex-col">
-                    <div class="flex-1 bg-gray-50 dark:bg-gray-700 rounded-lg overflow-hidden p-3">
-                        <pre class="h-full overflow-auto m-0"><code class="codePreview-${file.id} ${language} text-xs">${this.i18n.t('loading')}</code></pre>
+                <div class="flex-1 flex flex-col min-h-0 relative">
+                    <!-- 复制按钮：固定在外层容器右上角，不随滚动移动 -->
+                    <button onclick="app.copyTextToClipboard('.codePreview-${file.id}')"
+                            class="copy-btn-${file.id} absolute top-5 right-5 w-8 h-8 flex items-center justify-center bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 rounded-lg shadow-lg transition-all z-20 border border-gray-200 dark:border-gray-600 opacity-0 pointer-events-none"
+                            title="${this.i18n.t('copy')}">
+                        <i class="fas fa-copy text-sm"></i>
+                    </button>
+                    <!-- 可滚动的预览内容区域 -->
+                    <div class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                        <pre class="m-0 whitespace-pre-wrap break-words"><code class="codePreview-${file.id} ${language} text-xs">${this.i18n.t('loading')}</code></pre>
                     </div>
-                    <div class="mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                    <!-- 固定的信息和按钮区域 -->
+                    <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <div>
@@ -1614,6 +2325,13 @@ class PebbleDrive {
                         el.textContent = text;
                         hljs.highlightElement(el);
                     });
+
+                    // 显示复制按钮（淡入效果）
+                    const copyBtns = document.querySelectorAll(`.copy-btn-${file.id}`);
+                    copyBtns.forEach(btn => {
+                        btn.classList.remove('opacity-0', 'pointer-events-none');
+                        btn.classList.add('opacity-100');
+                    });
                 } catch (error) {
                     const previewElements = document.querySelectorAll(`.codePreview-${file.id}`);
                     previewElements.forEach(el => {
@@ -1624,11 +2342,19 @@ class PebbleDrive {
         } else if (isText) {
             // TXT文件预览 - 异步加载内容
             previewHTML = `
-                <div class="w-full h-full flex flex-col">
-                    <div class="flex-1 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden p-3">
-                        <pre class="textPreview-${file.id} text-xs text-gray-800 dark:text-gray-100 whitespace-pre-wrap font-mono h-full overflow-auto">${this.i18n.t('loading')}</pre>
+                <div class="flex-1 flex flex-col min-h-0 relative">
+                    <!-- 复制按钮：固定在外层容器右上角，不随滚动移动 -->
+                    <button onclick="app.copyTextToClipboard('.textPreview-${file.id}')"
+                            class="copy-btn-${file.id} absolute top-5 right-5 w-8 h-8 flex items-center justify-center bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700 rounded-lg shadow-lg transition-all z-20 border border-gray-200 dark:border-gray-600 opacity-0 pointer-events-none"
+                            title="${this.i18n.t('copy')}">
+                        <i class="fas fa-copy text-sm"></i>
+                    </button>
+                    <!-- 可滚动的预览内容区域 -->
+                    <div class="flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-gray-100 dark:bg-gray-700 rounded-lg p-3">
+                        <pre class="textPreview-${file.id} text-xs text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words font-mono">${this.i18n.t('loading')}</pre>
                     </div>
-                    <div class="mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                    <!-- 固定的信息和按钮区域 -->
+                    <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
                         <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
                         <div class="grid grid-cols-2 gap-2 text-xs">
                             <div>
@@ -1672,6 +2398,13 @@ class PebbleDrive {
                     previewElements.forEach(el => {
                         el.textContent = text;
                     });
+
+                    // 显示复制按钮（淡入效果）
+                    const copyBtns = document.querySelectorAll(`.copy-btn-${file.id}`);
+                    copyBtns.forEach(btn => {
+                        btn.classList.remove('opacity-0', 'pointer-events-none');
+                        btn.classList.add('opacity-100');
+                    });
                 } catch (error) {
                     // 更新所有匹配的预览元素
                     const previewElements = document.querySelectorAll(`.textPreview-${file.id}`);
@@ -1682,13 +2415,13 @@ class PebbleDrive {
             }, 0);
         } else {
             previewHTML = `
-                <div class="text-center">
+                <div class="flex-1 flex flex-col items-center justify-center text-center px-4">
                     <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full mb-3">
                         <i class="fas ${this.getFileIcon(file.type)} text-2xl ${this.getFileIconColor(file.type)}"></i>
                     </div>
-                    <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1 truncate px-4">${file.name}</h3>
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1 truncate max-w-full">${file.name}</h3>
                     <p class="text-gray-600 dark:text-gray-400 text-xs mb-4">${this.i18n.t('unknownFile')}</p>
-                    <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-4 max-w-md mx-auto">
+                    <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-4 max-w-md w-full">
                         <div class="grid grid-cols-2 gap-3 text-xs">
                             <div>
                                 <span class="text-gray-600 dark:text-gray-400">${this.i18n.t('fileSize')}</span>
@@ -1997,6 +2730,44 @@ class PebbleDrive {
             this.hideModal();
         } catch (err) {
             this.showToast(this.i18n.t('copyFailed') || '复制失败，请手动选择复制', 'error');
+        }
+    }
+
+    /**
+     * 复制文本到剪贴板（用于预览区域）
+     */
+    async copyTextToClipboard(elementSelector) {
+        try {
+            // 获取元素
+            const element = document.querySelector(elementSelector);
+            if (!element) {
+                throw new Error('Element not found');
+            }
+
+            // 获取文本内容
+            const text = element.textContent || element.innerText;
+
+            // 尝试使用现代 Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                // 降级方案：使用传统方法
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-999999px';
+                textArea.style.top = '-999999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+
+            this.showToast(this.i18n.t('copySuccess') || '已复制到剪贴板', 'success');
+        } catch (error) {
+            console.error('Copy failed:', error);
+            this.showToast(this.i18n.t('copyFailed') || '复制失败', 'error');
         }
     }
 

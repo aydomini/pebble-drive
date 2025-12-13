@@ -17,7 +17,7 @@
 ### Core Capabilities
 - 🚀 **Serverless Architecture** - Global edge deployment with 100k requests/day free tier
 - 📦 **Triple Storage System** - R2 for files (10GB free) + D1 for metadata (5GB free) + KV for sessions & rate limiting
-- 📤 **Drag & Drop Upload** - Multi-file upload, up to 100MB per file, smart paginated list
+- 📤 **Drag & Drop Upload** - Multi-file upload, up to 5GB per file, smart paginated list
 - 🔍 **Smart File Management** - Filename fuzzy search, multi-field sorting (name/size/time), auto-pagination loading
 - 🔗 **Advanced Sharing** - Password protection (SHA-256 hashing), time-limited links, download count limits, access statistics, rate limiting for brute-force prevention
 - 👁️ **Comprehensive Preview** - Support for images, PDF, Markdown, 40+ code languages, SVG (dual preview), plain text files
@@ -74,6 +74,35 @@ Access Share → Rate Limit Check → Permission Verify → D1 Query → R2 Get 
 
 ## 🚀 Quick Start
 
+### ⚡ Fastest Deployment (3 minutes)
+
+**Recommended for new users - one-click deployment tool:**
+
+```bash
+# 1. Clone the project
+git clone https://github.com/aydomini/pebble-drive.git
+cd pebble-drive
+
+# 2. Install dependencies
+npm install
+
+# 3. Login to Cloudflare
+npx wrangler login
+
+# 4. One-click deploy (auto-create resources, configure, deploy)
+npm run deploy
+```
+
+**🎉 Done!** The script will automatically:
+- ✅ Check environment and login status
+- ✅ Guide you through configuration presets (Personal/Team/Enterprise)
+- ✅ Auto-deploy backend and frontend
+- ✅ Output access URLs and configuration summary
+
+**💡 Tip:** After first deployment, you need to set passwords. See "Setting Secrets" section in [DEPLOY.md](DEPLOY.md).
+
+---
+
 ### 📋 Deployment Preparation
 
 **Required Resources (All Free):**
@@ -83,14 +112,14 @@ Access Share → Rate Limit Check → Permission Verify → D1 Query → R2 Get 
 **Optional Resources:**
 - GitHub Account (for GitHub Actions auto-deployment)
 
-**🎯 Choose Your Deployment Method:**
+**🎯 More Deployment Methods:**
 
 | Method | Difficulty | Best For | Time Required |
 |--------|-----------|----------|---------------|
+| **⚡ One-Click Deploy (Recommended)** | ⭐ Super Easy | All users, 3 minutes | 3-5 min |
 | **Method 1: Cloudflare Dashboard Deployment** | ⭐ Easy | Complete beginners, no command line | 10-15 min |
 | **Method 2: GitHub Actions Auto-Deploy** | ⭐⭐ Medium | Git users who want automation | 5-10 min |
-| **Method 3: Local Secure Deployment** | ⭐⭐⭐ Advanced | Privacy-conscious users, CLI familiar | 3-5 min |
-| **Method 4: Manual Deployment** | ⭐⭐⭐⭐ Expert | Developers who need full control | 15-20 min |
+| **Method 3: Manual Deployment** | ⭐⭐⭐ Expert | Developers who need full control | 15-20 min |
 
 ---
 
@@ -412,44 +441,7 @@ Visit frontend address to use!
 <details>
 <summary>
 
-### Method 3: Local Secure Deployment (For Privacy-Conscious Users)
-
-**Best for: Privacy-conscious users who don't want to expose configurations**
-
-</summary>
-
-```bash
-# 1. Clone project
-git clone https://github.com/aydomini/pebble-drive.git
-cd pebble-drive
-
-# 2. Run secure deployment script (one-click complete)
-./deploy-secure-local.sh
-```
-
-**🛡️ Security Features:**
-- ✅ **Local Configuration Storage** - All sensitive info saved in local `.env.local` file
-- ✅ **Environment Isolation** - Dev, test, prod environments completely separated
-- ✅ **No Cloud Leakage** - Configuration never uploaded to any repository
-- ✅ **Automated Deployment** - One-click completes all deployment steps
-- ✅ **Smart Cleanup** - Optional deletion of local sensitive files
-
-**📋 Script Features:**
-- Auto-create all Cloudflare resources
-- Auto-generate strong random keys
-- Auto-configure Workers Secrets
-- Auto-initialize database
-- Auto-deploy frontend and backend
-- Smart error handling and rollback
-
-</details>
-
----
-
-<details>
-<summary>
-
-### Method 4: Manual Deployment (For Developers)
+### Method 3: Manual Deployment (For Developers)
 
 **Best for: Advanced users who need complete control**
 

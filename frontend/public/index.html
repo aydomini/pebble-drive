@@ -4,6 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PebbleDrive - 轻量级云存储</title>
+
+    <!-- PWA 支持 -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#3b82f6">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="PebbleDrive">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+
+    <!-- SEO 优化 -->
+    <meta name="description" content="基于 Cloudflare 的免费轻量级私人云存储，支持文件上传、分享、预览，完全免费，全球CDN加速">
+    <meta name="keywords" content="云存储,文件分享,Cloudflare,免费存储,PWA,私人云盘">
+    <meta name="author" content="PebbleDrive">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="PebbleDrive - 轻量级云存储">
+    <meta property="og:description" content="基于 Cloudflare 的免费轻量级私人云存储">
+    <meta property="og:image" content="/logo.svg">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary">
+    <meta property="twitter:title" content="PebbleDrive - 轻量级云存储">
+    <meta property="twitter:description" content="基于 Cloudflare 的免费轻量级私人云存储">
+    <meta property="twitter:image" content="/logo.svg">
+
     <script>
         // 隐藏 Vite 开发服务器的连接日志
         (function() {
@@ -103,7 +131,7 @@
         .markdown-preview ul, .markdown-preview ol { margin-left: 2em; margin-bottom: 1em; }
         .markdown-preview li { margin-bottom: 0.25em; }
         .markdown-preview code { background-color: #f3f4f6; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
-        .markdown-preview pre { background-color: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: auto; margin-bottom: 1em; }
+        .markdown-preview pre { background-color: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; word-break: break-word; margin-bottom: 1em; }
         .dark .markdown-preview code { background-color: #374151; color: #e5e7eb; }
         .dark .markdown-preview pre { background-color: #1f2937; }
         .markdown-preview pre code { background-color: transparent; padding: 0; }
@@ -216,10 +244,21 @@
     <!-- 登录界面（默认显示） -->
     <div id="loginScreen" class="flex-1 flex items-center justify-center p-4">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md transition-colors">
-            <div class="text-center mb-8">
-                <i class="fas fa-cloud text-blue-600 dark:text-blue-400 text-5xl mb-4"></i>
-                <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-2" data-i18n="appTitle">PebbleDrive</h1>
-                <p class="text-gray-600 dark:text-gray-300" data-i18n="appSubtitle">轻量级云存储</p>
+            <div class="flex items-center justify-center gap-3 mb-8">
+                <!-- Logo -->
+                <img src="/logo.svg" alt="PebbleDrive" class="w-12 h-12 flex-shrink-0 transition-all" />
+                <!-- 标题和副标题 -->
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-2" data-i18n="appTitle">
+                        PebbleDrive
+                    </h1>
+                    <div class="flex items-center">
+                        <p class="text-gray-600 dark:text-gray-300" data-i18n="appSubtitle">轻量级云存储</p>
+                        <a href="#" id="loginVersionLink" class="text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition ml-2" target="_blank" rel="noopener noreferrer" title="View on GitHub">
+                            v1.0.0
+                        </a>
+                    </div>
+                </div>
             </div>
 
             <form id="loginForm" class="space-y-6">
@@ -267,13 +306,17 @@
         <div class="max-w-7xl mx-auto px-8 py-4">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3">
-                    <i class="fas fa-cloud text-blue-600 dark:text-blue-400 text-2xl"></i>
-                    <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100" data-i18n="appTitle">PebbleDrive</h1>
+                    <img src="/logo.svg" alt="PebbleDrive" class="w-6 h-6 transition-all" />
+                    <h1 class="text-xl font-bold text-gray-800 dark:text-gray-100" data-i18n="appTitle">PebbleDrive</h1>
+                    <!-- 版本号链接 -->
+                    <a href="#" id="appVersionLink" class="text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition ml-2" target="_blank" rel="noopener noreferrer" title="View on GitHub">
+                        v1.0.0
+                    </a>
                 </div>
                 <div class="flex items-center space-x-4">
                     <!-- 语言切换按钮 -->
                     <button id="langToggle" class="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition" data-i18n-title="langToggle" title="切换语言">
-                        <span class="text-sm font-semibold">中/EN</span>
+                        <i class="fas fa-language"></i>
                     </button>
                     <!-- 主题切换按钮 -->
                     <button id="themeToggle" class="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition" data-i18n-title="themeToggle" title="切换主题">
@@ -288,13 +331,16 @@
         </div>
     </header>
 
-    <main class="flex-1 flex items-center justify-center py-2 px-4 sm:px-6 md:px-8 overflow-auto min-h-0">
-        <div class="w-full max-w-md sm:max-w-2xl md:max-w-5xl mx-auto">
+    <main class="flex-1 flex p-5 overflow-auto min-h-0">
+        <div class="w-full md:max-w-6xl lg:max-w-7xl mx-auto">
             <!-- 卡片式布局：桌面端左右布局，移动端上下布局 -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 md:gap-8 h-[85vh] p-2 -m-2">
+            <!-- 所有设备固定高度，避免整页滚动 -->
+            <!-- 高度计算：100vh - Header(56px) - Main padding(40px) = 100vh - 96px -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 h-[calc(100vh-96px)]">
                 <!-- 左侧列/上方区域：上传卡片 + 文件列表卡片 -->
-                <div class="md:col-span-1 flex flex-col gap-4 sm:gap-6 md:gap-8 h-full min-h-0">
-                    <!-- 上传卡片 (移动端1/3高度，桌面端1/3高度) -->
+                <!-- 所有设备填充高度，使用 flex 分配比例 -->
+                <div class="md:col-span-1 flex flex-col gap-5 h-full min-h-0">
+                    <!-- 上传卡片 (所有设备 flex-1 按比例分配) -->
                     <div class="flex-[1] md:flex-[1] bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col min-h-0 transition-colors">
                         <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                             <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">
@@ -302,28 +348,33 @@
                             </h2>
                         </div>
                         <div class="flex-1 flex flex-col items-center justify-center p-3 min-h-0 overflow-auto">
-                            <div id="dragArea" class="drag-area flex flex-col items-center justify-center py-4 px-3 text-center w-full h-full min-h-[80px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
-                                <i class="fas fa-upload text-base text-gray-400 dark:text-gray-500 mb-0.5"></i>
-                                <h3 class="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5" data-i18n="uploadArea">点击或拖拽</h3>
-                                <p class="text-gray-500 dark:text-gray-400 text-[9px]" data-i18n="uploadHint">最大 100MB</p>
+                            <div id="dragArea" class="drag-area flex flex-row items-center justify-center gap-2 py-4 px-3 text-center w-full h-full min-h-[80px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+                                <i class="fas fa-upload text-sm text-gray-400 dark:text-gray-500"></i>
+                                <div class="flex flex-col items-start gap-0.5">
+                                    <span class="text-[10px] font-medium text-gray-700 dark:text-gray-300" data-i18n="uploadArea">点击或拖拽</span>
+                                    <span class="text-[10px] text-gray-500 dark:text-gray-400" data-i18n="uploadHint">最大 100MB</span>
+                                </div>
                                 <input type="file" id="fileInput" multiple class="hidden">
                             </div>
 
                             <!-- 上传进度列表 -->
-                            <div id="uploadProgress" class="hidden w-full mt-2 space-y-1">
-                                <div id="progressList"></div>
+                            <div id="uploadProgress" class="hidden w-full mt-2">
+                                <div class="mb-1 px-2">
+                                    <span class="text-xs font-medium text-gray-700 dark:text-gray-300" data-i18n="uploadProgressTitle">上传进度</span>
+                                </div>
+                                <div id="progressList" class="space-y-1"></div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- 文件列表卡片 (移动端2/3高度，桌面端2/3高度) -->
+                    <!-- 文件列表卡片 (所有设备 flex-2 按比例分配) -->
                     <div class="flex-[2] md:flex-[2] bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex flex-col min-h-0 max-h-full transition-colors">
                         <!-- 标题栏：与上传卡片样式统一 -->
                         <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
                             <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">
                                 <i class="fas fa-folder mr-1 text-xs"></i><span data-i18n="myFiles">我的文件</span>
                             </h2>
-                            <span id="storageInfo" class="text-[10px] text-gray-500 dark:text-gray-400 hidden sm:inline">
+                            <span id="storageInfo" class="text-[10px] text-gray-500 dark:text-gray-400">
                                 <i class="fas fa-database text-[9px]"></i>
                                 <span id="storageUsed">0 KB</span>/<span id="storageTotal">10 GB</span>
                             </span>
@@ -362,13 +413,14 @@
                 </div>
 
                 <!-- 右侧/隐藏区域：文件预览卡片（桌面端显示，移动端隐藏，通过模态框显示） -->
-                <div class="hidden md:flex md:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex-col min-h-0 transition-colors">
+                <!-- 桌面端填充全部高度 -->
+                <div class="hidden md:flex md:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden flex-col min-h-0 md:h-full transition-colors">
                     <div class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                         <h2 class="text-sm font-semibold text-gray-800 dark:text-gray-100">
                             <i class="fas fa-eye mr-1 text-xs"></i><span data-i18n="preview">文件预览</span>
                         </h2>
                     </div>
-                    <div id="previewArea" class="flex-1 overflow-y-auto p-6 min-h-0">
+                    <div id="previewArea" class="flex-1 p-5 min-h-0 flex flex-col">
                         <div class="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
                             <i class="fas fa-file-alt text-4xl mb-3"></i>
                             <p class="text-sm" data-i18n="selectFileToPreview">选择文件查看预览</p>
@@ -381,8 +433,8 @@
     </main>
 
     <!-- 移动端文件预览模态框 -->
-    <div id="mobilePreviewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 md:hidden flex items-center justify-center p-8">
-        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl h-[80vh] max-h-[80vh] flex flex-col overflow-hidden">
+    <div id="mobilePreviewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 md:hidden flex items-center justify-center p-5">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl h-full flex flex-col overflow-hidden">
             <!-- 顶部导航栏 -->
             <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
                 <button id="closeMobilePreview" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100">
@@ -392,7 +444,7 @@
                 <div class="w-6"></div>
             </div>
             <!-- 预览内容 -->
-            <div id="mobilePreviewArea" class="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900"></div>
+            <div id="mobilePreviewArea" class="flex-1 p-5 bg-gray-50 dark:bg-gray-900 flex flex-col min-h-0"></div>
         </div>
     </div>
 
@@ -431,5 +483,45 @@
         window.VITE_TURNSTILE_SITE_KEY = '%VITE_TURNSTILE_SITE_KEY%';
     </script>
     <script src="js/app.js"></script>
+
+    <!-- Service Worker 注册 -->
+    <script>
+        // 注册 Service Worker（PWA 支持）
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then((registration) => {
+                        console.log('[PWA] Service Worker 注册成功:', registration.scope);
+
+                        // 检查更新
+                        registration.addEventListener('updatefound', () => {
+                            const newWorker = registration.installing;
+                            console.log('[PWA] 发现新版本，准备更新...');
+
+                            newWorker.addEventListener('statechange', () => {
+                                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                    // 新版本已安装，提示用户刷新
+                                    console.log('[PWA] 新版本已就绪，请刷新页面');
+
+                                    // 可选：显示更新提示
+                                    if (confirm('检测到新版本，是否立即更新？')) {
+                                        newWorker.postMessage({ type: 'SKIP_WAITING' });
+                                        window.location.reload();
+                                    }
+                                }
+                            });
+                        });
+                    })
+                    .catch((error) => {
+                        console.error('[PWA] Service Worker 注册失败:', error);
+                    });
+
+                // 监听 Service Worker 控制权变更
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    console.log('[PWA] Service Worker 已更新');
+                });
+            });
+        }
+    </script>
 </body>
 </html>

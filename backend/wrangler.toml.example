@@ -2,19 +2,59 @@ name = "pebble-drive-api"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
 
-# 生产环境变量
+# ============================================
+# 配置预设（选择一个适合你的场景）
+# ============================================
+
+# 预设1: 个人使用（推荐）
+# - 单文件最大 100MB
+# - 总存储配额 10GB
+# - 上传限制 50 次/小时
+
+# 预设2: 小团队
+# - 单文件最大 500MB
+# - 总存储配额 50GB
+# - 上传限制 100 次/小时
+
+# 预设3: 企业级
+# - 单文件最大 2000MB (2GB)
+# - 总存储配额 500GB
+# - 上传限制 200 次/小时
+
+# ============================================
+# 环境变量配置
+# ============================================
+
+# 生产环境（默认使用预设1）
 [env.production]
 vars = {
-    STORAGE_QUOTA_GB = "10",
-    SHARE_DOMAIN = "https://your-custom-domain.com"  # 可选：自定义分享链接域名
+    # 文件上传限制
+    MAX_FILE_SIZE_MB = "100",                    # 单文件最大大小（MB）
+    STORAGE_QUOTA_GB = "10",                     # 总存储配额（GB）
+    BLOCKED_EXTENSIONS = ".exe,.sh,.bat,.cmd,.com,.scr,.msi,.dll,.vbs,.ps1",  # 禁止上传的文件类型
+
+    # 速率限制（防止滥用）
+    UPLOAD_RATE_LIMIT = "50",                    # 每个IP在窗口期内最多上传次数
+    UPLOAD_RATE_WINDOW = "3600",                 # 速率限制窗口（秒），3600 = 1小时
+
+    # 可选配置
+    SHARE_DOMAIN = "https://your-custom-domain.com"  # 自定义分享链接域名
 }
 
-# 开发环境变量（可选）
+# 开发环境（可选，用于本地测试）
 [env.development]
 vars = {
+    MAX_FILE_SIZE_MB = "100",
     STORAGE_QUOTA_GB = "10",
-    SHARE_DOMAIN = "https://your-custom-domain.com"  # 可选：自定义分享链接域名
+    BLOCKED_EXTENSIONS = ".exe,.sh,.bat,.cmd",
+    UPLOAD_RATE_LIMIT = "50",
+    UPLOAD_RATE_WINDOW = "3600",
+    SHARE_DOMAIN = "https://your-custom-domain.com"
 }
+
+# ============================================
+# Cloudflare 资源绑定
+# ============================================
 
 # R2 Storage Bucket（对象存储）
 [[r2_buckets]]
@@ -33,3 +73,4 @@ database_id = "your-database-id-here"  # 替换为你的 D1 数据库 ID
 binding = "RATE_LIMIT_KV"
 id = "your-kv-id-here"  # 通过 wrangler kv namespace create RATE_LIMIT_KV 创建
 preview_id = "your-preview-kv-id-here"  # 通过 wrangler kv namespace create RATE_LIMIT_KV --preview 创建
+

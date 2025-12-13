@@ -2,12 +2,17 @@
  * 路由配置
  */
 import { handleUpload } from './handlers/upload.js';
+import { handleUploadInit } from './handlers/uploadInit.js';
+import { handleUploadChunk } from './handlers/uploadChunk.js';
+import { handleUploadComplete } from './handlers/uploadComplete.js';
+import { handleUploadAbort } from './handlers/uploadAbort.js';
 import { handleListFiles } from './handlers/files.js';
 import { handleDownload } from './handlers/download.js';
 import { handleDelete } from './handlers/delete.js';
 import { handleShare, handleShareAccess } from './handlers/share.js';
 import { handleStorageQuota } from './handlers/storage.js';
 import { handleLogin } from './handlers/login.js';
+import { handleConfigLimits } from './handlers/configLimits.js';
 import { requireAuth } from './middleware/auth.js';
 
 /**
@@ -16,7 +21,12 @@ import { requireAuth } from './middleware/auth.js';
  */
 export const routes = {
     '/api/login': { handler: handleLogin, requireAuth: false },
+    '/api/config/limits': { handler: handleConfigLimits, requireAuth: false }, // 公开配置API
     '/api/upload': { handler: handleUpload, requireAuth: true },
+    '/api/upload/init': { handler: handleUploadInit, requireAuth: true }, // 分片上传：初始化
+    '/api/upload/chunk': { handler: handleUploadChunk, requireAuth: true }, // 分片上传：上传分片
+    '/api/upload/complete': { handler: handleUploadComplete, requireAuth: true }, // 分片上传：完成
+    '/api/upload/abort': { handler: handleUploadAbort, requireAuth: true }, // 分片上传：中止
     '/api/files': { handler: handleListFiles, requireAuth: true },
     '/api/download': { handler: handleDownload, requireAuth: true },
     '/api/delete': { handler: handleDelete, requireAuth: true },

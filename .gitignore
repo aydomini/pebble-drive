@@ -43,5 +43,16 @@ npm-debug.log*
 *.bak
 *.backup
 
+# Backup directory (created by npm run upgrade)
+.backup/
+
+# Deployment scripts (use npm scripts instead)
+*.sh
+!scripts/*.sh
+
 # Claude collaboration memory (local development notes)
 claude.md
+CLAUDE.md
+
+# Claude Code settings (local development configuration)
+.claude/

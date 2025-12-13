@@ -2,7 +2,7 @@ name: Deploy PebbleDrive
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ]  # 只有 main 分支部署 workers
   workflow_dispatch:
 
 jobs:
