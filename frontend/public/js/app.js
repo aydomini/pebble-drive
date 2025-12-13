@@ -12,6 +12,7 @@ const DEMO_MODE = true;
 
 /**
  * DEMO 模式的 mock 数据
+ * 使用 Blob URL 来支持预览
  */
 const MOCK_FILES = [
     {
@@ -20,7 +21,26 @@ const MOCK_FILES = [
         size: 2456,
         type: 'text/markdown',
         uploadDate: new Date(Date.now() - 86400000).toISOString(),
-        downloadUrl: '/mock-files/README.md'
+        downloadUrl: URL.createObjectURL(new Blob([
+            '# PebbleDrive Demo\n\n',
+            '欢迎使用 PebbleDrive 演示模式！\n\n',
+            '## 功能特性\n\n',
+            '- ✅ 文件上传（拖拽/点击）\n',
+            '- ✅ 文件预览（Markdown、代码、图片、PDF）\n',
+            '- ✅ 文件分享（密码保护、限时、限次数）\n',
+            '- ✅ 多语言支持（中/英文）\n',
+            '- ✅ 深色模式\n\n',
+            '## 演示说明\n\n',
+            '这是一个完全在浏览器本地运行的演示版本：\n\n',
+            '- 所有操作仅在内存中进行\n',
+            '- 刷新页面后数据重置\n',
+            '- 无需后端服务器\n\n',
+            '## 开始使用\n\n',
+            '1. 尝试上传文件\n',
+            '2. 点击文件预览\n',
+            '3. 切换语言和主题\n',
+            '4. 体验分享功能\n'
+        ], { type: 'text/markdown' }))
     },
     {
         id: 'demo-2',
@@ -28,7 +48,31 @@ const MOCK_FILES = [
         size: 5230,
         type: 'application/javascript',
         uploadDate: new Date(Date.now() - 172800000).toISOString(),
-        downloadUrl: '/mock-files/example.js'
+        downloadUrl: URL.createObjectURL(new Blob([
+            '/**\n',
+            ' * PebbleDrive Demo - 示例 JavaScript 代码\n',
+            ' */\n\n',
+            'class FileManager {\n',
+            '    constructor() {\n',
+            '        this.files = [];\n',
+            '        console.log("FileManager initialized");\n',
+            '    }\n\n',
+            '    async uploadFile(file) {\n',
+            '        console.log(`Uploading: ${file.name}`);\n',
+            '        // 模拟上传逻辑\n',
+            '        return {\n',
+            '            id: Date.now(),\n',
+            '            name: file.name,\n',
+            '            size: file.size\n',
+            '        };\n',
+            '    }\n\n',
+            '    deleteFile(id) {\n',
+            '        this.files = this.files.filter(f => f.id !== id);\n',
+            '        console.log(`File ${id} deleted`);\n',
+            '    }\n',
+            '}\n\n',
+            'export default FileManager;\n'
+        ], { type: 'application/javascript' }))
     },
     {
         id: 'demo-3',
@@ -36,7 +80,8 @@ const MOCK_FILES = [
         size: 125678,
         type: 'image/png',
         uploadDate: new Date(Date.now() - 259200000).toISOString(),
-        downloadUrl: '/mock-files/demo-image.png'
+        // 1x1 透明 PNG 图片的 base64
+        downloadUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
     },
     {
         id: 'demo-4',
@@ -44,7 +89,25 @@ const MOCK_FILES = [
         size: 892,
         type: 'application/json',
         uploadDate: new Date(Date.now() - 345600000).toISOString(),
-        downloadUrl: '/mock-files/config.json'
+        downloadUrl: URL.createObjectURL(new Blob([
+            '{\n',
+            '  "app": {\n',
+            '    "name": "PebbleDrive",\n',
+            '    "version": "1.3.0",\n',
+            '    "description": "轻量级云存储"\n',
+            '  },\n',
+            '  "features": {\n',
+            '    "upload": true,\n',
+            '    "preview": true,\n',
+            '    "share": true,\n',
+            '    "search": true\n',
+            '  },\n',
+            '  "limits": {\n',
+            '    "maxFileSize": "100MB",\n',
+            '    "storageQuota": "10GB"\n',
+            '  }\n',
+            '}\n'
+        ], { type: 'application/json' }))
     },
     {
         id: 'demo-5',
@@ -52,7 +115,39 @@ const MOCK_FILES = [
         size: 3456,
         type: 'text/css',
         uploadDate: new Date(Date.now() - 432000000).toISOString(),
-        downloadUrl: '/mock-files/styles.css'
+        downloadUrl: URL.createObjectURL(new Blob([
+            '/**\n',
+            ' * PebbleDrive Demo - 示例 CSS 样式\n',
+            ' */\n\n',
+            ':root {\n',
+            '    --primary-color: #3b82f6;\n',
+            '    --secondary-color: #8b5cf6;\n',
+            '    --text-color: #1f2937;\n',
+            '    --bg-color: #ffffff;\n',
+            '}\n\n',
+            '.container {\n',
+            '    max-width: 1200px;\n',
+            '    margin: 0 auto;\n',
+            '    padding: 2rem;\n',
+            '}\n\n',
+            '.card {\n',
+            '    background: var(--bg-color);\n',
+            '    border-radius: 0.5rem;\n',
+            '    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n',
+            '    padding: 1.5rem;\n',
+            '}\n\n',
+            '.button-primary {\n',
+            '    background: var(--primary-color);\n',
+            '    color: white;\n',
+            '    padding: 0.5rem 1rem;\n',
+            '    border-radius: 0.375rem;\n',
+            '    transition: all 0.2s;\n',
+            '}\n\n',
+            '.button-primary:hover {\n',
+            '    background: #2563eb;\n',
+            '    transform: translateY(-2px);\n',
+            '}\n'
+        ], { type: 'text/css' }))
     }
 ];
 
@@ -588,7 +683,11 @@ class I18nManager {
                 chunkedCompleteFailed: '完成上传失败',
 
                 // 上传进度
-                uploadProgressTitle: '上传进度'
+                uploadProgressTitle: '上传进度',
+
+                // DEMO 模式
+                demoLoginHint: '💡 演示模式：输入任意密码即可登录体验',
+                demoBanner: '📍 演示模式：任意密码可登录，所有操作仅在浏览器本地进行，刷新后数据重置'
             },
             en: {
                 // Login screen
@@ -753,7 +852,11 @@ class I18nManager {
                 chunkedCompleteFailed: 'Failed to complete upload',
 
                 // 上传进度
-                uploadProgressTitle: 'Upload Progress'
+                uploadProgressTitle: 'Upload Progress',
+
+                // DEMO Mode
+                demoLoginHint: '💡 Demo Mode: Enter any password to login',
+                demoBanner: '📍 Demo Mode: All operations are local, data resets on refresh'
             }
         };
         // 延迟应用语言，确保 DOM 已加载
@@ -1035,6 +1138,16 @@ class PebbleDrive {
      * 需要 Turnstile 配置和加载
      */
     initTurnstile() {
+        // DEMO 模式：跳过 Turnstile 初始化
+        if (DEMO_MODE) {
+            console.log('[DEMO 模式] 跳过 Turnstile 验证');
+            const container = document.getElementById('turnstile-container');
+            if (container) {
+                container.classList.add('hidden');
+            }
+            return;
+        }
+
         // 检查 Turnstile 配置
         if (!window.TURNSTILE_SITE_KEY) {
             console.error('Turnstile未配置，无法初始化验证组件');
@@ -1180,6 +1293,12 @@ class PebbleDrive {
      * 需要 Turnstile 验证
      */
     getTurnstileToken() {
+        // DEMO 模式：返回假 token
+        if (DEMO_MODE) {
+            console.log('[DEMO 模式] 跳过 Turnstile 验证，返回假 token');
+            return 'demo-token-' + Date.now();
+        }
+
         // 检查 Turnstile 是否配置
         if (!window.TURNSTILE_SITE_KEY) {
             throw new Error('Turnstile验证未配置，请联系管理员');
@@ -1251,6 +1370,21 @@ class PebbleDrive {
             loginError.classList.add('hidden');
 
             try {
+                // DEMO 模式：直接调用 login 函数，不走 API
+                if (DEMO_MODE) {
+                    console.log('[DEMO 模式] 使用本地登录，跳过 API 调用');
+                    await this.auth.login(password);
+
+                    // 登录成功 - 显示主应用界面（包含所有初始化）
+                    console.log('[DEMO 模式] 登录成功，初始化主界面');
+                    await this.showAppScreen();
+
+                    // 恢复按钮状态
+                    loginBtn.disabled = false;
+                    loginBtnText.textContent = this.i18n.t('loginBtn');
+                    return;
+                }
+
                 // 获取 Turnstile token（如果已配置）
                 const turnstileToken = this.getTurnstileToken();
 
@@ -1453,6 +1587,13 @@ class PebbleDrive {
      * 加载上传限制配置（从后端获取）
      */
     async loadUploadConfig() {
+        // DEMO 模式：使用默认配置
+        if (DEMO_MODE) {
+            console.log('[DEMO 模式] 使用默认上传配置');
+            this.updateUploadHints();
+            return;
+        }
+
         try {
             const response = await fetch(`${this.apiEndpoint}/config/limits`);
 
@@ -2175,12 +2316,20 @@ class PebbleDrive {
                     }
 
                     // 加载 SVG 代码
-                    const response = await fetch(`${this.apiEndpoint}/download?id=${file.id}`, {
-                        headers: {
-                            ...this.auth.getAuthHeaders()
-                        }
-                    });
-                    const text = await response.text();
+                    let text;
+                    if (DEMO_MODE && file.downloadUrl) {
+                        // DEMO 模式：直接使用 Blob URL
+                        const response = await fetch(file.downloadUrl);
+                        text = await response.text();
+                    } else {
+                        // 正常模式：从 API 获取
+                        const response = await fetch(`${this.apiEndpoint}/download?id=${file.id}`, {
+                            headers: {
+                                ...this.auth.getAuthHeaders()
+                            }
+                        });
+                        text = await response.text();
+                    }
                     const previewElements = document.querySelectorAll(`.svgPreview-${file.id}`);
                     previewElements.forEach(el => {
                         el.textContent = text;
@@ -2348,12 +2497,20 @@ class PebbleDrive {
             // 异步加载并渲染 Markdown
             setTimeout(async () => {
                 try {
-                    const response = await fetch(`${this.apiEndpoint}/download?id=${file.id}`, {
-                        headers: {
-                            ...this.auth.getAuthHeaders()
-                        }
-                    });
-                    const text = await response.text();
+                    let text;
+                    if (DEMO_MODE && file.downloadUrl) {
+                        // DEMO 模式：直接使用 Blob URL
+                        const response = await fetch(file.downloadUrl);
+                        text = await response.text();
+                    } else {
+                        // 正常模式：从 API 获取
+                        const response = await fetch(`${this.apiEndpoint}/download?id=${file.id}`, {
+                            headers: {
+                                ...this.auth.getAuthHeaders()
+                            }
+                        });
+                        text = await response.text();
+                    }
 
                     // 保存原始文本到隐藏元素（用于复制）
                     const rawElements = document.querySelectorAll(`.markdownRaw-${file.id}`);
@@ -2434,12 +2591,20 @@ class PebbleDrive {
             // 异步加载并高亮代码
             setTimeout(async () => {
                 try {
-                    const response = await fetch(`${this.apiEndpoint}/download?id=${file.id}`, {
-                        headers: {
-                            ...this.auth.getAuthHeaders()
-                        }
-                    });
-                    const text = await response.text();
+                    let text;
+                    if (DEMO_MODE && file.downloadUrl) {
+                        // DEMO 模式：直接使用 Blob URL
+                        const response = await fetch(file.downloadUrl);
+                        text = await response.text();
+                    } else {
+                        // 正常模式：从 API 获取
+                        const response = await fetch(`${this.apiEndpoint}/download?id=${file.id}`, {
+                            headers: {
+                                ...this.auth.getAuthHeaders()
+                            }
+                        });
+                        text = await response.text();
+                    }
                     const previewElements = document.querySelectorAll(`.codePreview-${file.id}`);
                     previewElements.forEach(el => {
                         el.textContent = text;
@@ -2507,12 +2672,20 @@ class PebbleDrive {
             // 异步加载文本内容 - 使用 class 选择器以支持桌面端和移动端
             setTimeout(async () => {
                 try {
-                    const response = await fetch(`${this.apiEndpoint}/download?id=${file.id}`, {
-                        headers: {
-                            ...this.auth.getAuthHeaders()
-                        }
-                    });
-                    const text = await response.text();
+                    let text;
+                    if (DEMO_MODE && file.downloadUrl) {
+                        // DEMO 模式：直接使用 Blob URL
+                        const response = await fetch(file.downloadUrl);
+                        text = await response.text();
+                    } else {
+                        // 正常模式：从 API 获取
+                        const response = await fetch(`${this.apiEndpoint}/download?id=${file.id}`, {
+                            headers: {
+                                ...this.auth.getAuthHeaders()
+                            }
+                        });
+                        text = await response.text();
+                    }
                     // 更新所有匹配的预览元素（桌面端和移动端）
                     const previewElements = document.querySelectorAll(`.textPreview-${file.id}`);
                     previewElements.forEach(el => {

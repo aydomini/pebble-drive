@@ -1,0 +1,51 @@
+name: Deploy Demo to GitHub Pages
+
+on:
+  push:
+    branches: [ demo ]
+  workflow_dispatch:
+
+# 设置 GITHUB_TOKEN 的权限，允许部署到 GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 只允许一个并发部署
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # 上传 frontend/public 目录
+          path: './frontend/public'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Deployment Success
+        run: |
+          echo "🎉 Demo 部署成功！"
+          echo "📍 访问地址: ${{ steps.deployment.outputs.page_url }}"
+          echo ""
+          echo "✨ Demo 特性："
+          echo "   - 任意密码可登录"
+          echo "   - 所有功能本地模拟"
+          echo "   - 基于 main 分支最新 UI"

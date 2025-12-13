@@ -6,14 +6,14 @@
     <title>PebbleDrive - 轻量级云存储</title>
 
     <!-- PWA 支持 -->
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#3b82f6">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PebbleDrive">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
-    <link rel="icon" type="image/svg+xml" href="/logo.svg">
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+    <link rel="icon" type="image/svg+xml" href="./logo.svg">
 
     <!-- SEO 优化 -->
     <meta name="description" content="基于 Cloudflare 的免费轻量级私人云存储，支持文件上传、分享、预览，完全免费，全球CDN加速">
@@ -24,13 +24,13 @@
     <meta property="og:type" content="website">
     <meta property="og:title" content="PebbleDrive - 轻量级云存储">
     <meta property="og:description" content="基于 Cloudflare 的免费轻量级私人云存储">
-    <meta property="og:image" content="/logo.svg">
+    <meta property="og:image" content="./logo.svg">
 
     <!-- Twitter -->
     <meta property="twitter:card" content="summary">
     <meta property="twitter:title" content="PebbleDrive - 轻量级云存储">
     <meta property="twitter:description" content="基于 Cloudflare 的免费轻量级私人云存储">
-    <meta property="twitter:image" content="/logo.svg">
+    <meta property="twitter:image" content="./logo.svg">
 
     <script>
         // 隐藏 Vite 开发服务器的连接日志
@@ -246,7 +246,7 @@
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 w-full max-w-md transition-colors">
             <div class="flex items-center justify-center gap-3 mb-8">
                 <!-- Logo -->
-                <img src="/logo.svg" alt="PebbleDrive" class="w-12 h-12 flex-shrink-0 transition-all" />
+                <img src="./logo.svg" alt="PebbleDrive" class="w-12 h-12 flex-shrink-0 transition-all" />
                 <!-- 标题和副标题 -->
                 <div>
                     <h1 class="text-3xl font-bold text-gray-800 dark:text-gray-100 mb-2" data-i18n="appTitle">
@@ -317,7 +317,7 @@
         <div class="max-w-7xl mx-auto px-8 py-4">
             <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-3">
-                    <img src="/logo.svg" alt="PebbleDrive" class="w-6 h-6 transition-all" />
+                    <img src="./logo.svg" alt="PebbleDrive" class="w-6 h-6 transition-all" />
                     <h1 class="text-xl font-bold text-gray-800 dark:text-gray-100" data-i18n="appTitle">PebbleDrive</h1>
                     <!-- 版本号链接 -->
                     <a href="#" id="appVersionLink" class="text-xs text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition ml-2" target="_blank" rel="noopener noreferrer" title="View on GitHub">
@@ -500,7 +500,7 @@
         // 注册 Service Worker（PWA 支持）
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js')
+                navigator.serviceWorker.register('./service-worker.js')
                     .then((registration) => {
                         console.log('[PWA] Service Worker 注册成功:', registration.scope);
 
