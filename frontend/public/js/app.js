@@ -5,6 +5,58 @@ const APP_VERSION = '1.3.0';
 const GITHUB_REPO_URL = 'https://github.com/aydomini/pebble-drive';
 
 /**
+ * DEMO 模式配置
+ * 启用后，任意密码都可以登录，所有功能使用 mock 数据
+ */
+const DEMO_MODE = true;
+
+/**
+ * DEMO 模式的 mock 数据
+ */
+const MOCK_FILES = [
+    {
+        id: 'demo-1',
+        name: 'README.md',
+        size: 2456,
+        type: 'text/markdown',
+        uploadDate: new Date(Date.now() - 86400000).toISOString(),
+        downloadUrl: '/mock-files/README.md'
+    },
+    {
+        id: 'demo-2',
+        name: 'example.js',
+        size: 5230,
+        type: 'application/javascript',
+        uploadDate: new Date(Date.now() - 172800000).toISOString(),
+        downloadUrl: '/mock-files/example.js'
+    },
+    {
+        id: 'demo-3',
+        name: 'demo-image.png',
+        size: 125678,
+        type: 'image/png',
+        uploadDate: new Date(Date.now() - 259200000).toISOString(),
+        downloadUrl: '/mock-files/demo-image.png'
+    },
+    {
+        id: 'demo-4',
+        name: 'config.json',
+        size: 892,
+        type: 'application/json',
+        uploadDate: new Date(Date.now() - 345600000).toISOString(),
+        downloadUrl: '/mock-files/config.json'
+    },
+    {
+        id: 'demo-5',
+        name: 'styles.css',
+        size: 3456,
+        type: 'text/css',
+        uploadDate: new Date(Date.now() - 432000000).toISOString(),
+        downloadUrl: '/mock-files/styles.css'
+    }
+];
+
+/**
  * Cloudflare Turnstile 配置
  * 启用 Turnstile 人机验证保护
  * 配置方法：见 README 安全配置章节
@@ -809,6 +861,17 @@ class AuthManager {
      * 需要 Turnstile 验证
      */
     async login(password) {
+        // DEMO 模式：任意密码都返回成功
+        if (DEMO_MODE) {
+            console.log('[DEMO 模式] 登录成功，任意密码均可');
+            const mockToken = 'demo-token-' + Date.now();
+            this.setToken(mockToken);
+            return {
+                token: mockToken,
+                message: 'Demo 模式登录成功'
+            };
+        }
+
         // 检查 Turnstile 配置
         if (!window.TURNSTILE_SITE_KEY) {
             throw new Error('Turnstile验证未配置，请联系管理员');
@@ -1685,6 +1748,47 @@ class PebbleDrive {
     }
 
     async uploadFile(file) {
+        // DEMO 模式：模拟上传
+        if (DEMO_MODE) {
+            return new Promise((resolve) => {
+                console.log('[DEMO 模式] 模拟上传文件:', file.name);
+
+                // 模拟上传进度
+                let progress = 0;
+                const progressItem = document.querySelector(`[data-file-upload="${file.name}"]`);
+
+                const interval = setInterval(() => {
+                    progress += 20;
+                    if (progressItem) {
+                        const progressBar = progressItem.querySelector('.progress-bar');
+                        if (progressBar) {
+                            progressBar.style.width = progress + '%';
+                        }
+                    }
+
+                    if (progress >= 100) {
+                        clearInterval(interval);
+
+                        // 添加到文件列表
+                        const mockFile = {
+                            id: 'demo-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+                            name: file.name,
+                            size: file.size,
+                            type: file.type,
+                            uploadDate: new Date().toISOString(),
+                            downloadUrl: URL.createObjectURL(file) // 使用 Blob URL 用于预览
+                        };
+
+                        this.files.push(mockFile);
+                        this.showToast(`${file.name} ${this.i18n.t('uploadSuccess')}`, 'success');
+                        this.renderFileList();
+                        this.updateStorageInfo();
+                        resolve(mockFile);
+                    }
+                }, 200); // 每200ms增加20%
+            });
+        }
+
         // 判断是否需要使用分片上传（>= 100MB）
         const CHUNKED_UPLOAD_THRESHOLD = 100 * 1024 * 1024; // 100MB
 
@@ -1842,6 +1946,22 @@ class PebbleDrive {
 
     async loadFiles() {
         try {
+            // DEMO 模式：返回 mock 数据
+            if (DEMO_MODE) {
+                console.log('[DEMO 模式] 使用 mock 文件数据');
+                this.files = [...MOCK_FILES]; // 复制 mock 数据
+                this.pagination = {
+                    currentPage: 1,
+                    pageSize: 50,
+                    total: MOCK_FILES.length,
+                    totalPages: 1
+                };
+                this.renderFileList();
+                this.renderPagination();
+                this.updateStorageInfo();
+                return;
+            }
+
             // 构建查询参数
             const params = new URLSearchParams({
                 page: this.pagination.currentPage,
@@ -2777,6 +2897,16 @@ class PebbleDrive {
         const file = this.files.find(f => f.id === fileId);
         if (file) {
             try {
+                // DEMO 模式：直接从本地数组删除
+                if (DEMO_MODE) {
+                    console.log('[DEMO 模式] 模拟删除文件:', file.name);
+                    this.files = this.files.filter(f => f.id !== fileId);
+                    this.renderFileList();
+                    this.updateStorageInfo();
+                    this.showToast(`${file.name} ${this.i18n.t('deleted')}`, 'success');
+                    return;
+                }
+
                 // 调用 API 删除文件
                 const response = await fetch(`${this.apiEndpoint}/delete?id=${fileId}`, {
                     method: 'DELETE',
@@ -2935,6 +3065,14 @@ class PebbleDrive {
 
     async updateStorageInfo() {
         try {
+            // DEMO 模式：返回 mock 存储信息
+            if (DEMO_MODE) {
+                const totalSize = this.files.reduce((sum, file) => sum + file.size, 0);
+                document.getElementById('storageUsed').textContent = this.formatFileSize(totalSize);
+                document.getElementById('storageTotal').textContent = '10 GB';
+                return;
+            }
+
             // 调用存储配额API获取总容量和已用空间
             const response = await fetch(`${this.apiEndpoint}/storage/quota`, {
                 headers: {
