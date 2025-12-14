@@ -65,6 +65,161 @@ echo "your-turnstile-secret" | npx wrangler secret put TURNSTILE_SECRET_KEY
 
 ---
 
+## 🤖 GitHub Actions 自动化部署
+
+### 适用场景
+- ✅ 使用 GitHub 托管代码
+- ✅ 每次 push 到 main 分支自动部署
+- ✅ 自动创建和配置资源（D1、KV、R2）
+- ✅ 无需本地运行部署命令
+
+### 配置步骤
+
+#### 1. 添加 GitHub Secrets
+
+在仓库的 **Settings → Secrets and variables → Actions** 中添加：
+
+| Secret 名称 | 说明 | 获取方式 |
+|------------|------|---------|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare API 令牌 | [Cloudflare Dashboard](https://dash.cloudflare.com/profile/api-tokens) → Create Token → Edit Cloudflare Workers |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账户 ID | [Cloudflare Dashboard](https://dash.cloudflare.com/) → 右侧栏"Account ID" |
+| `TURNSTILE_SITE_KEY` | Turnstile 站点密钥（可选） | [Turnstile Dashboard](https://dash.cloudflare.com/?to=/:account/turnstile) → Create Site |
+| `PAGES_PROJECT_NAME` | Pages 项目名（可选） | 默认 `pebble-drive` |
+
+#### 2. 配置 Worker Secrets
+
+**首次部署后**，在本地运行以下命令配置 Worker 密钥：
+
+```bash
+cd backend
+
+# 登录密码（必需）
+echo "your-password" | npx wrangler secret put AUTH_PASSWORD
+
+# JWT 密钥（必需，32位随机字符串）
+openssl rand -base64 32 | npx wrangler secret put AUTH_TOKEN_SECRET
+
+# Turnstile 验证密钥（可选）
+echo "your-turnstile-secret" | npx wrangler secret put TURNSTILE_SECRET_KEY
+```
+
+#### 3. 触发部署
+
+**自动触发**：
+```bash
+git add .
+git commit -m "feat: 更新功能"
+git push origin main
+```
+
+**手动触发**：
+- 访问仓库的 **Actions** 标签
+- 选择 **Deploy PebbleDrive** workflow
+- 点击 **Run workflow**
+
+### Workflow 功能
+
+#### 自动化操作
+- ✅ **自动创建资源**：
+  - D1 数据库（`pebble-drive-db`）
+  - KV Namespace（`RATE_LIMIT` 和 `RATE_LIMIT_preview`）
+  - 自动初始化数据库表结构
+
+- ✅ **智能配置更新**：
+  - 自动获取资源 ID 并更新 `wrangler.toml`
+  - 支持 macOS 和 Linux 的 sed 语法差异
+
+- ✅ **构建验证**：
+  - 检查环境变量是否正确注入到前端
+  - 构建失败时立即中止部署
+
+- ✅ **完整部署流程**：
+  1. 部署后端 Worker
+  2. 初始化数据库
+  3. 获取 Worker URL
+  4. 构建前端（注入环境变量）
+  5. 部署前端 Pages
+
+#### 部署日志示例
+
+```
+🔍 验证后端配置...
+✅ 找到数据库 ID: 9e4ff5c6-xxxx
+✅ 找到 KV ID: 2fe27b4b-xxxx
+✅ 后端配置验证完成
+
+🚀 部署后端到 Cloudflare Workers...
+✅ Worker 已部署
+
+🗃️ 初始化数据库表结构...
+✅ 数据库表已创建
+
+🏗️ 构建前端...
+📡 API 地址: https://pebble-drive-api.aydomini.workers.dev
+✅ API_BASE_URL 注入成功
+✅ TURNSTILE_SITE_KEY 注入成功
+
+🚀 部署前端到 Cloudflare Pages...
+✨ Deployment complete!
+🌎 https://xxxxxxxx.pebble-drive.pages.dev
+
+🎉 PebbleDrive 完整部署成功！
+```
+
+### 故障排查
+
+#### 问题 1：KV Namespace 创建失败
+
+**错误信息**：
+```
+⚠️ 未找到 RATE_LIMIT KV，正在创建...
+Error: Invalid request
+```
+
+**解决方案**：
+- 检查 `CLOUDFLARE_API_TOKEN` 是否有 **Workers KV Storage** 权限
+- 重新创建 API Token，确保包含所有必需权限
+
+#### 问题 2：前端构建验证失败
+
+**错误信息**：
+```
+❌ API_BASE_URL 注入失败
+```
+
+**原因**：
+- `VITE_API_BASE_URL` 环境变量未正确传递
+- Worker 部署失败导致 URL 获取错误
+
+**解决方案**：
+1. 检查 Worker 是否成功部署
+2. 查看 "Get Worker URL" 步骤的输出
+3. 手动触发 workflow 重新部署
+
+#### 问题 3：Worker Secrets 未配置
+
+**提醒信息**：
+```
+⚠️ 重要提醒：首次部署后需要配置 Worker Secrets
+```
+
+**解决方案**：
+- 按照上方"配置 Worker Secrets"步骤操作
+- Secrets 配置后立即生效，无需重新部署
+
+### 与本地部署的区别
+
+| 特性 | GitHub Actions | 本地部署 |
+|------|----------------|---------|
+| **触发方式** | 自动（git push） | 手动（npm run deploy） |
+| **资源创建** | 自动创建 D1/KV | 需要手动创建 |
+| **配置更新** | 自动更新 wrangler.toml | 需要手动编辑 |
+| **环境隔离** | GitHub Runner | 本地环境 |
+| **构建验证** | 自动验证环境变量 | 需要手动检查 |
+| **适用场景** | 团队协作、持续部署 | 快速测试、本地开发 |
+
+---
+
 ## 🔄 升级指南
 
 ### 方式一：自动升级（推荐）

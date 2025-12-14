@@ -1,7 +1,7 @@
 /**
  * 应用版本信息
  */
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 const GITHUB_REPO_URL = 'https://github.com/aydomini/pebble-drive';
 
 /**
@@ -328,20 +328,35 @@ class ThemeManager {
             // 切换 highlight.js 主题
             document.getElementById('hljs-light')?.setAttribute('disabled', 'disabled');
             document.getElementById('hljs-dark')?.removeAttribute('disabled');
+            // 更新 theme-color 为深色背景
+            this.updateThemeColor('#111827'); // dark:bg-gray-900
         } else {
             document.documentElement.classList.remove('dark');
             // 切换 highlight.js 主题
             document.getElementById('hljs-dark')?.setAttribute('disabled', 'disabled');
             document.getElementById('hljs-light')?.removeAttribute('disabled');
+            // 更新 theme-color 为浅色背景
+            this.updateThemeColor('#f9fafb'); // bg-gray-50
         }
         // 延迟更新图标，确保 DOM 已加载
         setTimeout(() => this.updateThemeIcon(theme), 0);
     }
 
     /**
+     * 动态更新 theme-color（移动端浏览器主题色）
+     */
+    updateThemeColor(color) {
+        const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+        if (metaThemeColor) {
+            metaThemeColor.setAttribute('content', color);
+        }
+    }
+
+    /**
      * 更新主题图标
      */
     updateThemeIcon(theme) {
+        // 更新 Header 中的主题图标
         const darkIcon = document.querySelector('#themeToggle .dark-icon');
         const lightIcon = document.querySelector('#themeToggle .light-icon');
 
@@ -352,6 +367,20 @@ class ThemeManager {
             } else {
                 darkIcon.classList.remove('hidden');
                 lightIcon.classList.add('hidden');
+            }
+        }
+
+        // 更新抽屉中的主题图标
+        const drawerDarkIcon = document.querySelector('#drawerTheme .dark-icon');
+        const drawerLightIcon = document.querySelector('#drawerTheme .light-icon');
+
+        if (drawerDarkIcon && drawerLightIcon) {
+            if (theme === 'dark') {
+                drawerDarkIcon.classList.add('hidden');
+                drawerLightIcon.classList.remove('hidden');
+            } else {
+                drawerDarkIcon.classList.remove('hidden');
+                drawerLightIcon.classList.add('hidden');
             }
         }
     }
@@ -432,6 +461,14 @@ class I18nManager {
                 oneDay: '1 天',
                 sevenDays: '7 天',
                 thirtyDays: '30 天',
+                permanent: '永久',
+                noLimit: '不限',
+                expiryTime: '有效期',
+                downloadTimes: '下载次数',
+                accessPassword: '访问密码（可选）',
+                optional: '可选',
+                times: '次',
+                passwordMustBeAlphanumeric: '密码只能包含数字和字母',
 
                 // 存储信息
                 totalUsed: '已使用',
@@ -597,6 +634,14 @@ class I18nManager {
                 oneDay: '1 Day',
                 sevenDays: '7 Days',
                 thirtyDays: '30 Days',
+                permanent: 'Permanent',
+                noLimit: 'No Limit',
+                expiryTime: 'Expiry Time',
+                downloadTimes: 'Download Times',
+                accessPassword: 'Access Password (Optional)',
+                optional: 'Optional',
+                times: 'times',
+                passwordMustBeAlphanumeric: 'Password must be alphanumeric',
 
                 // Storage info
                 totalUsed: 'Used',
@@ -1164,6 +1209,7 @@ class PebbleDrive {
         this.loadFiles();
         this.updateStorageInfo();
         this.setupMobilePreview();
+        this.setupDrawerMenu(); // 设置抽屉式菜单
     }
 
     /**
@@ -1450,8 +1496,131 @@ class PebbleDrive {
         const closeMobilePreview = document.getElementById('closeMobilePreview');
         if (closeMobilePreview) {
             closeMobilePreview.addEventListener('click', () => {
+                // 隐藏模态框
                 document.getElementById('mobilePreviewModal').classList.add('hidden');
+                // 清除选中状态（修复bug：关闭预览后应该取消文件选中）
+                this.selectedFileId = null;
+                this.updateFileHighlight();
             });
+        }
+    }
+
+    /**
+     * 设置抽屉式菜单（手机横屏时使用）
+     */
+    setupDrawerMenu() {
+        const fabDrawer = document.getElementById('fabDrawer');
+        const drawerToggle = document.getElementById('drawerToggle');
+        const drawerLang = document.getElementById('drawerLang');
+        const drawerTheme = document.getElementById('drawerTheme');
+        const drawerLogout = document.getElementById('drawerLogout');
+
+        if (!fabDrawer || !drawerToggle) return;
+
+        let isOpen = false;
+
+        // 切换抽屉显示/隐藏
+        const toggleDrawer = () => {
+            isOpen = !isOpen;
+            if (isOpen) {
+                // 打开抽屉：滑入视口
+                fabDrawer.classList.remove('translate-x-full');
+                fabDrawer.classList.add('drawer-open');
+            } else {
+                // 关闭抽屉：滑出视口
+                fabDrawer.classList.add('translate-x-full');
+                fabDrawer.classList.remove('drawer-open');
+            }
+        };
+
+        // 触发按钮：切换抽屉
+        drawerToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleDrawer();
+        });
+
+        // 点击外部关闭抽屉
+        document.addEventListener('click', (e) => {
+            if (fabDrawer && !fabDrawer.contains(e.target) && isOpen) {
+                toggleDrawer();
+            }
+        });
+
+        // 语言切换
+        if (drawerLang) {
+            drawerLang.addEventListener('click', () => {
+                this.i18n.toggle();
+                // 重新渲染文件列表以更新界面文本
+                this.filterFiles();
+                // 更新上传提示
+                this.updateUploadHints();
+                // 更新上传进度条的按钮文本
+                this.updateUploadProgressTitles();
+                // 重新渲染当前预览的文件（如果有选中的文件）
+                if (this.selectedFileId) {
+                    this.showFilePreview(this.selectedFileId);
+                }
+                // 如果在登录界面，更新 Turnstile 语言
+                if (!this.auth.isAuthenticated() && this.turnstileWidgetId !== null) {
+                    this.initTurnstile();
+                }
+                // 关闭抽屉
+                toggleDrawer();
+            });
+        }
+
+        // 主题切换
+        if (drawerTheme) {
+            drawerTheme.addEventListener('click', () => {
+                this.theme.toggle();
+                // 更新抽屉按钮中的主题图标
+                this.updateDrawerThemeIcon();
+                // 如果在登录界面，更新 Turnstile 主题
+                if (!this.auth.isAuthenticated() && this.turnstileWidgetId !== null) {
+                    this.initTurnstile();
+                }
+                // 关闭抽屉
+                toggleDrawer();
+            });
+        }
+
+        // 登出
+        if (drawerLogout) {
+            drawerLogout.addEventListener('click', () => {
+                this.auth.logout();
+                // 清空密码输入框
+                const passwordInput = document.getElementById('loginPassword');
+                if (passwordInput) {
+                    passwordInput.value = '';
+                }
+                this.showLoginScreen();
+                // 重新初始化 Turnstile
+                if (window.TURNSTILE_SITE_KEY) {
+                    setTimeout(() => {
+                        this.initTurnstile();
+                    }, 100);
+                }
+                // 关闭抽屉
+                toggleDrawer();
+            });
+        }
+    }
+
+    /**
+     * 更新抽屉按钮中的主题图标
+     */
+    updateDrawerThemeIcon() {
+        const darkIcon = document.querySelector('#drawerTheme .dark-icon');
+        const lightIcon = document.querySelector('#drawerTheme .light-icon');
+
+        if (darkIcon && lightIcon) {
+            if (this.theme.theme === 'dark') {
+                darkIcon.classList.add('hidden');
+                lightIcon.classList.remove('hidden');
+            } else {
+                darkIcon.classList.remove('hidden');
+                lightIcon.classList.add('hidden');
+            }
         }
     }
 
@@ -1894,7 +2063,7 @@ class PebbleDrive {
         }
 
         fileList.innerHTML = this.files.map(file => `
-            <div class="file-item px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 transition-colors ${this.selectedFileId === file.id ? 'bg-blue-100 dark:bg-gray-700' : ''}"
+            <div class="file-item px-4 py-3 hover:bg-blue-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 transition-colors"
                  data-file-id="${file.id}">
                 <div class="flex items-center justify-between">
                     <div class="flex items-center space-x-3 flex-1 min-w-0">
@@ -1920,6 +2089,9 @@ class PebbleDrive {
                 </div>
             </div>
         `).join('');
+
+        // 渲染完成后立即更新高亮状态（确保选中状态正确）
+        this.updateFileHighlight();
     }
 
     selectFile(fileId) {
@@ -1941,22 +2113,23 @@ class PebbleDrive {
         const fileList = document.getElementById('fileList');
         if (!fileList) return;
 
-        // 移除所有文件项的高亮
+        // 移除所有文件项的高亮和 selected 标记
         const allItems = fileList.querySelectorAll('.file-item');
         allItems.forEach(item => {
-            item.classList.remove('bg-blue-100', 'dark:bg-gray-700');
+            item.classList.remove('bg-blue-100', 'dark:bg-gray-700', 'selected');
         });
 
-        // 添加当前选中文件的高亮
+        // 添加当前选中文件的高亮和 selected 标记
         if (this.selectedFileId) {
             const selectedItem = fileList.querySelector(`[data-file-id="${this.selectedFileId}"]`);
             if (selectedItem) {
-                selectedItem.classList.add('bg-blue-100', 'dark:bg-gray-700');
+                selectedItem.classList.add('bg-blue-100', 'dark:bg-gray-700', 'selected');
             }
         }
     }
 
     clearPreview() {
+        // 清除桌面端预览
         const previewArea = document.getElementById('previewArea');
         if (previewArea) {
             previewArea.innerHTML = `
@@ -1966,6 +2139,21 @@ class PebbleDrive {
                     <p class="text-xs mt-1">${this.i18n.t('supportedFormats')}</p>
                 </div>
             `;
+        }
+
+        // 同时关闭移动端预览模态框（如果打开）
+        const mobilePreviewModal = document.getElementById('mobilePreviewModal');
+        if (mobilePreviewModal) {
+            mobilePreviewModal.classList.add('hidden');
+        }
+
+        // 强制移除所有文件项的选中状态（确保在移动端也能生效）
+        const fileList = document.getElementById('fileList');
+        if (fileList) {
+            const allItems = fileList.querySelectorAll('.file-item');
+            allItems.forEach(item => {
+                item.classList.remove('bg-blue-100', 'dark:bg-gray-700', 'selected');
+            });
         }
     }
 
@@ -2013,9 +2201,9 @@ class PebbleDrive {
                     </div>
                     <!-- 固定的信息和按钮区域 -->
                     <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div>
+                        <h3 class="preview-name text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
+                        <div class="preview-info grid grid-cols-2 gap-2 text-xs">
+                            <div class="preview-type">
                                 <span class="text-gray-600 dark:text-gray-400">${this.i18n.t('fileType')}</span>
                                 <span class="text-gray-900 dark:text-gray-100">${this.i18n.t('svgVectorImage')}</span>
                             </div>
@@ -2090,9 +2278,9 @@ class PebbleDrive {
                     </div>
                     <!-- 固定的信息和按钮区域 -->
                     <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div>
+                        <h3 class="preview-name text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
+                        <div class="preview-info grid grid-cols-2 gap-2 text-xs">
+                            <div class="preview-type">
                                 <span class="text-gray-600 dark:text-gray-400">${this.i18n.t('fileType')}</span>
                                 <span class="text-gray-900 dark:text-gray-100">${this.i18n.t('imageFile')}</span>
                             </div>
@@ -2139,9 +2327,9 @@ class PebbleDrive {
                     </div>
                     <!-- 固定的信息和按钮区域 -->
                     <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div>
+                        <h3 class="preview-name text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
+                        <div class="preview-info grid grid-cols-2 gap-2 text-xs">
+                            <div class="preview-type">
                                 <span class="text-gray-600 dark:text-gray-400">${this.i18n.t('fileType')}</span>
                                 <span class="text-gray-900 dark:text-gray-100">${this.i18n.t('pdfDocument')}</span>
                             </div>
@@ -2196,9 +2384,9 @@ class PebbleDrive {
                     </div>
                     <!-- 固定的信息和按钮区域 -->
                     <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div>
+                        <h3 class="preview-name text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
+                        <div class="preview-info grid grid-cols-2 gap-2 text-xs">
+                            <div class="preview-type">
                                 <span class="text-gray-600 dark:text-gray-400">${this.i18n.t('fileType')}</span>
                                 <span class="text-gray-900 dark:text-gray-100">${this.i18n.t('markdownFile')}</span>
                             </div>
@@ -2282,9 +2470,9 @@ class PebbleDrive {
                     </div>
                     <!-- 固定的信息和按钮区域 -->
                     <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div>
+                        <h3 class="preview-name text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
+                        <div class="preview-info grid grid-cols-2 gap-2 text-xs">
+                            <div class="preview-type">
                                 <span class="text-gray-600 dark:text-gray-400">${this.i18n.t('fileType')}</span>
                                 <span class="text-gray-900 dark:text-gray-100">${this.i18n.t('codeFile')} (${language.toUpperCase()})</span>
                             </div>
@@ -2355,9 +2543,9 @@ class PebbleDrive {
                     </div>
                     <!-- 固定的信息和按钮区域 -->
                     <div class="flex-shrink-0 mt-3 bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
-                        <div class="grid grid-cols-2 gap-2 text-xs">
-                            <div>
+                        <h3 class="preview-name text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 truncate">${file.name}</h3>
+                        <div class="preview-info grid grid-cols-2 gap-2 text-xs">
+                            <div class="preview-type">
                                 <span class="text-gray-600 dark:text-gray-400">${this.i18n.t('fileType')}</span>
                                 <span class="text-gray-900 dark:text-gray-100">${this.i18n.t('textFile')}</span>
                             </div>
@@ -2511,82 +2699,58 @@ class PebbleDrive {
         const modalTitle = document.getElementById('modalTitle');
         const modalContent = document.getElementById('modalContent');
 
-        modalTitle.textContent = this.i18n.t('advancedShareSettings');
+        modalTitle.textContent = this.i18n.t('share');
         modalContent.innerHTML = `
-            <div class="space-y-4">
-                <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded">
-                    <div class="flex items-center space-x-2">
-                        <i class="fas ${this.getFileIcon(file.type)} text-xl ${this.getFileIconColor(file.type)}"></i>
-                        <span class="font-medium text-gray-900 dark:text-gray-100">${file.name}</span>
+            <div class="space-y-1.5">
+                <!-- 文件名 -->
+                <div class="bg-gray-50 dark:bg-gray-700 px-1.5 py-0.5 rounded flex items-center space-x-1">
+                    <i class="fas ${this.getFileIcon(file.type)} ${this.getFileIconColor(file.type)} text-xs"></i>
+                    <span class="text-gray-900 dark:text-gray-100 text-xs truncate">${file.name}</span>
+                </div>
+
+                <!-- 有效期 和 下载次数（同一行） -->
+                <div class="grid grid-cols-2 gap-1.5">
+                    <div>
+                        <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">${this.i18n.t('expiryTime')}</label>
+                        <select id="shareExpirySelect" class="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+                            <option value="3600">${this.i18n.t('oneHour')}</option>
+                            <option value="86400" selected>${this.i18n.t('oneDay')}</option>
+                            <option value="604800">${this.i18n.t('sevenDays')}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">${this.i18n.t('downloadTimes')}</label>
+                        <select id="shareLimitSelect" class="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+                            <option value="1">1${this.i18n.t('times')}</option>
+                            <option value="10" selected>10${this.i18n.t('times')}</option>
+                            <option value="50">50${this.i18n.t('times')}</option>
+                        </select>
                     </div>
                 </div>
 
-                <div class="space-y-3">
-                    <div>
-                        <label class="flex items-center space-x-2 cursor-pointer">
-                            <input type="checkbox" id="shareEnableExpiry" class="rounded">
-                            <span class="text-sm text-gray-700 dark:text-gray-300">${this.i18n.t('setExpiry')}</span>
-                        </label>
-                        <div id="shareExpiryOptions" class="mt-2 ml-6 hidden">
-                            <select id="shareExpirySelect" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm dark:bg-gray-700 dark:text-gray-100">
-                                <option value="3600">${this.i18n.t('oneHour')}</option>
-                                <option value="86400">${this.i18n.t('oneDay')}</option>
-                                <option value="604800">${this.i18n.t('sevenDays')}</option>
-                                <option value="2592000">${this.i18n.t('thirtyDays')}</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="flex items-center space-x-2 cursor-pointer">
-                            <input type="checkbox" id="shareEnableLimit" class="rounded">
-                            <span class="text-sm text-gray-700 dark:text-gray-300">${this.i18n.t('limitDownloads')}</span>
-                        </label>
-                        <div id="shareLimitOptions" class="mt-2 ml-6 hidden">
-                            <input type="number" id="shareLimitInput" min="1" max="100" value="10"
-                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm dark:bg-gray-700 dark:text-gray-100"
-                                   placeholder="${this.i18n.t('downloadLimitPlaceholder')}">
-                        </div>
-                    </div>
-
-                    <div>
-                        <label class="flex items-center space-x-2 cursor-pointer">
-                            <input type="checkbox" id="shareEnablePassword" class="rounded">
-                            <span class="text-sm text-gray-700 dark:text-gray-300">${this.i18n.t('setPassword')}</span>
-                        </label>
-                        <div id="sharePasswordOptions" class="mt-2 ml-6 hidden">
-                            <input type="password" id="sharePasswordInput"
-                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm dark:bg-gray-700 dark:text-gray-100"
-                                   placeholder="${this.i18n.t('enterPassword')}">
-                        </div>
-                    </div>
+                <!-- 访问密码 -->
+                <div>
+                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">${this.i18n.t('accessPassword')}</label>
+                    <input type="text"
+                           id="sharePasswordInput"
+                           maxlength="16"
+                           class="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                           placeholder="${this.i18n.t('optional')}">
                 </div>
 
-                <div class="flex space-x-3 pt-4 border-t dark:border-gray-600">
+                <!-- 按钮 -->
+                <div class="grid grid-cols-2 gap-1 pt-0.5">
                     <button onclick="app.createAdvancedShare('${file.id}')"
-                            class="flex-1 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-                        <i class="fas fa-share mr-2"></i>${this.i18n.t('generateShareLink')}
+                            class="bg-green-600 text-white px-1.5 py-0.5 rounded text-xs hover:bg-green-700">
+                        <i class="fas fa-share"></i> ${this.i18n.t('share')}
                     </button>
                     <button onclick="app.hideModal()"
-                            class="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-600 dark:bg-gray-700 dark:text-gray-100">
+                            class="border border-gray-300 dark:border-gray-600 rounded text-xs hover:bg-gray-50 dark:hover:bg-gray-600 dark:bg-gray-700 dark:text-gray-100">
                         ${this.i18n.t('cancel')}
                     </button>
                 </div>
             </div>
         `;
-
-        // 设置复选框切换事件
-        setTimeout(() => {
-            document.getElementById('shareEnableExpiry').addEventListener('change', (e) => {
-                document.getElementById('shareExpiryOptions').classList.toggle('hidden', !e.target.checked);
-            });
-            document.getElementById('shareEnableLimit').addEventListener('change', (e) => {
-                document.getElementById('shareLimitOptions').classList.toggle('hidden', !e.target.checked);
-            });
-            document.getElementById('shareEnablePassword').addEventListener('change', (e) => {
-                document.getElementById('sharePasswordOptions').classList.toggle('hidden', !e.target.checked);
-            });
-        }, 0);
 
         modal.classList.remove('hidden');
     }
@@ -2596,24 +2760,26 @@ class PebbleDrive {
             const options = { fileId };
 
             // 获取过期时间
-            if (document.getElementById('shareEnableExpiry').checked) {
-                options.expiry = parseInt(document.getElementById('shareExpirySelect').value);
+            const expiry = parseInt(document.getElementById('shareExpirySelect').value);
+            if (expiry > 0) {
+                options.expiry = expiry;
             }
 
             // 获取下载次数限制
-            if (document.getElementById('shareEnableLimit').checked) {
-                const limit = parseInt(document.getElementById('shareLimitInput').value);
-                if (limit > 0) {
-                    options.downloadLimit = limit;
-                }
+            const limit = parseInt(document.getElementById('shareLimitSelect').value);
+            if (limit > 0) {
+                options.downloadLimit = limit;
             }
 
-            // 获取密码
-            if (document.getElementById('shareEnablePassword').checked) {
-                const password = document.getElementById('sharePasswordInput').value.trim();
-                if (password) {
-                    options.password = password;
+            // 获取密码（空 = 不设置）
+            const password = document.getElementById('sharePasswordInput').value.trim();
+            if (password) {
+                // 验证密码只包含数字和字母
+                if (!/^[a-zA-Z0-9]+$/.test(password)) {
+                    this.showToast(this.i18n.t('passwordMustBeAlphanumeric') || '密码只能包含数字和字母', 'error');
+                    return;
                 }
+                options.password = password;
             }
 
             // 调用 API 创建分享链接
@@ -2829,79 +2995,74 @@ class PebbleDrive {
             return;
         }
 
-        // 计算显示的页码范围
-        const maxVisiblePages = 5;
-        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+        let paginationHTML = '<div class="flex items-center justify-center text-sm text-gray-600 dark:text-gray-400">';
 
-        if (endPage - startPage < maxVisiblePages - 1) {
-            startPage = Math.max(1, endPage - maxVisiblePages + 1);
-        }
-
-        let paginationHTML = '<div class="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">';
-
-        // 左侧：文件统计
+        // 计算文件统计
         const startItem = (currentPage - 1) * this.pagination.pageSize + 1;
         const endItem = Math.min(currentPage * this.pagination.pageSize, total);
-        paginationHTML += `<div class="text-xs">${this.i18n.t('showingFiles')} ${startItem}-${endItem} / ${this.i18n.t('totalFiles')} ${total} ${this.i18n.t('files')}</div>`;
 
-        // 右侧：分页按钮
+        // 极简布局：文件统计 + 导航按钮
         paginationHTML += '<div class="flex items-center space-x-1">';
 
-        // 上一页按钮
-        paginationHTML += `
-            <button
-                onclick="app.goToPage(${currentPage - 1})"
-                class="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
-                ${currentPage === 1 ? 'disabled' : ''}
-            >
-                <i class="fas fa-chevron-left"></i>
-            </button>
-        `;
+        // 文件统计
+        paginationHTML += `<span class="text-[10px] font-medium text-gray-500 dark:text-gray-500">${startItem}-${endItem}/${total}</span>`;
 
-        // 第一页
-        if (startPage > 1) {
-            paginationHTML += `
-                <button onclick="app.goToPage(1)" class="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-xs">1</button>
-            `;
-            if (startPage > 2) {
-                paginationHTML += '<span class="px-1">...</span>';
-            }
-        }
-
-        // 页码按钮
-        for (let i = startPage; i <= endPage; i++) {
-            const isActive = i === currentPage;
+        // 第一页按钮（⏮）- 仅当上一页不是第一页时显示
+        if (currentPage > 2) {
             paginationHTML += `
                 <button
-                    onclick="app.goToPage(${i})"
-                    class="px-2 py-1 rounded text-xs ${isActive ? 'bg-blue-500 text-white' : 'hover:bg-gray-100 dark:hover:bg-gray-700'}"
+                    onclick="app.goToPage(1)"
+                    class="px-1 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                    title="${this.i18n.t('firstPage') || '第一页'}"
                 >
-                    ${i}
+                    <i class="fas fa-fast-backward text-[10px]"></i>
                 </button>
             `;
         }
 
-        // 最后一页
-        if (endPage < totalPages) {
-            if (endPage < totalPages - 1) {
-                paginationHTML += '<span class="px-1">...</span>';
-            }
-            paginationHTML += `
-                <button onclick="app.goToPage(${totalPages})" class="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-xs">${totalPages}</button>
-            `;
-        }
+        // 上一页按钮（◀）
+        paginationHTML += `
+            <button
+                onclick="app.goToPage(${currentPage - 1})"
+                class="px-1 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition"
+                ${currentPage === 1 ? 'disabled' : ''}
+                title="${this.i18n.t('previousPage') || '上一页'}"
+            >
+                <i class="fas fa-chevron-left text-[10px]"></i>
+            </button>
+        `;
 
-        // 下一页按钮
+        // 当前页码（高亮显示）
+        paginationHTML += `
+            <span class="px-2 py-0.5 rounded bg-blue-500 text-white text-[10px] font-semibold min-w-[24px] text-center">
+                ${currentPage}
+            </span>
+        `;
+
+        // 下一页按钮（▶）
         paginationHTML += `
             <button
                 onclick="app.goToPage(${currentPage + 1})"
-                class="px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                class="px-1 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition"
                 ${currentPage === totalPages ? 'disabled' : ''}
+                title="${this.i18n.t('nextPage') || '下一页'}"
             >
-                <i class="fas fa-chevron-right"></i>
+                <i class="fas fa-chevron-right text-[10px]"></i>
             </button>
         `;
+
+        // 最后一页按钮（⏭）- 仅当下一页不是最后一页时显示
+        if (currentPage < totalPages - 1) {
+            paginationHTML += `
+                <button
+                    onclick="app.goToPage(${totalPages})"
+                    class="px-1 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+                    title="${this.i18n.t('lastPage') || '最后一页'}"
+                >
+                    <i class="fas fa-fast-forward text-[10px]"></i>
+                </button>
+            `;
+        }
 
         paginationHTML += '</div></div>';
         paginationContainer.innerHTML = paginationHTML;

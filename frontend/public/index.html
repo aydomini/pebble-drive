@@ -2,12 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>PebbleDrive - 轻量级云存储</title>
 
     <!-- PWA 支持 -->
     <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#3b82f6">
+    <!-- theme-color 自动适配主题（JavaScript 动态更新） -->
+    <meta name="theme-color" content="#f9fafb" id="theme-color-meta">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="PebbleDrive">
@@ -90,6 +91,27 @@
             background-color: var(--bg-primary);
             color: var(--text-primary);
             transition: background-color 0.3s, color 0.3s;
+            /* 禁止 body 过度滚动（防止 iOS 橡皮筋效果） */
+            overscroll-behavior: none;
+            overflow: hidden;
+            height: 100vh;
+            height: 100dvh; /* 使用动态视口高度 */
+            /* PWA 专用：固定定位 + 禁止触摸滚动 */
+            position: fixed;
+            width: 100%;
+            top: 0;
+            left: 0;
+            touch-action: none; /* 禁止所有触摸手势 */
+        }
+
+        /* 允许内容区域的触摸滚动 */
+        main,
+        #fileList,
+        #previewArea,
+        #mobilePreviewArea,
+        .overflow-auto,
+        .overflow-y-auto {
+            touch-action: pan-y pan-x; /* 允许垂直和水平滚动 */
         }
 
         .drag-area {
@@ -236,6 +258,393 @@
                 width: 300px !important; /* Turnstile normal 固定宽度 */
             }
         }
+
+        /* ==========================================
+           抽屉式菜单样式（手机横屏优化）
+           ========================================== */
+        /* 抽屉容器 */
+        #fabDrawer {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 抽屉主体 */
+        .drawer-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 4px; /* 按钮和面板之间的间距 */
+            padding-right: 8px; /* 右侧留出边距 */
+        }
+
+        /* 触发按钮（左侧凸出部分 - 动态透明度） */
+        .drawer-toggle {
+            position: absolute;
+            left: -34px; /* 调整位置以适应完整圆角 */
+            width: 30px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.6); /* 关闭时：60% 不透明 */
+            border-radius: 8px; /* 完整圆角矩形 */
+            box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 1;
+            backdrop-filter: blur(8px); /* 毛玻璃效果 */
+            -webkit-backdrop-filter: blur(8px);
+        }
+
+        .dark .drawer-toggle {
+            background: rgba(31, 41, 55, 0.6); /* 深色模式关闭时：60% 不透明 */
+            box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 抽屉打开时：透明度提升到 80% */
+        .drawer-open .drawer-toggle {
+            background: rgba(255, 255, 255, 0.8); /* 打开时：80% 不透明 */
+        }
+
+        .dark .drawer-open .drawer-toggle {
+            background: rgba(31, 41, 55, 0.8); /* 深色模式打开时：80% 不透明 */
+        }
+
+        .drawer-toggle:hover {
+            background: rgba(243, 244, 246, 0.8); /* 悬停：浅灰色 80% */
+            left: -36px;
+        }
+
+        .dark .drawer-toggle:hover {
+            background: rgba(55, 65, 81, 0.8); /* 深色模式悬停：稍亮的灰色 80% */
+        }
+
+        /* 打开时悬停：进一步提升透明度到 90% */
+        .drawer-open .drawer-toggle:hover {
+            background: rgba(243, 244, 246, 0.9);
+        }
+
+        .dark .drawer-open .drawer-toggle:hover {
+            background: rgba(55, 65, 81, 0.9);
+        }
+
+        .drawer-toggle i {
+            color: #6b7280; /* 图标：中灰色 */
+            font-size: 14px;
+            transition: transform 0.3s ease;
+        }
+
+        .dark .drawer-toggle i {
+            color: #9ca3af; /* 深色模式图标：浅灰色 */
+        }
+
+        /* 抽屉打开时箭头旋转 */
+        .drawer-open .drawer-toggle i {
+            transform: rotate(180deg);
+        }
+
+        /* 抽屉面板（完整圆角矩形） */
+        .drawer-panel {
+            background: white;
+            border-radius: 8px; /* 完整圆角矩形 */
+            box-shadow: -4px 0 12px rgba(0, 0, 0, 0.15);
+            padding: 12px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 48px;
+        }
+
+        .dark .drawer-panel {
+            background: #1f2937;
+            box-shadow: -4px 0 12px rgba(0, 0, 0, 0.4);
+        }
+
+        /* 功能按钮 */
+        .drawer-panel button {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            background: #f3f4f6;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: none;
+        }
+
+        .dark .drawer-panel button {
+            background: #374151;
+        }
+
+        .drawer-panel button:hover {
+            background: #e5e7eb;
+            transform: scale(1.05);
+        }
+
+        .dark .drawer-panel button:hover {
+            background: #4b5563;
+        }
+
+        .drawer-panel button i {
+            color: #6b7280;
+            font-size: 16px;
+        }
+
+        .dark .drawer-panel button i {
+            color: #9ca3af;
+        }
+
+        /* 登出按钮特殊颜色 */
+        .drawer-panel button:last-child:hover {
+            background: #fee2e2;
+        }
+
+        .dark .drawer-panel button:last-child:hover {
+            background: #7f1d1d;
+        }
+
+        .drawer-panel button:last-child i {
+            color: #dc2626;
+        }
+
+        .dark .drawer-panel button:last-child i {
+            color: #ef4444;
+        }
+
+        /* ==========================================
+           分享面板全局紧凑设计（所有设备统一，放大40%版本）
+           ========================================== */
+        /* 确保外层容器正确居中（考虑移动端地址栏） */
+        #fileModal > div {
+            padding: 1rem !important; /* 16px，保持呼吸空间 */
+            min-height: 100dvh !important; /* 使用动态视口高度（考虑地址栏） */
+            height: 100dvh !important; /* 固定高度为动态视口 */
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+
+        /* 隐藏标题区域，节省空间 */
+        #fileModal .flex.items-center.justify-between.mb-4 {
+            display: none !important;
+        }
+
+        /* 模态框紧凑设计（放大40%，增加内边距） */
+        #fileModal > div > div {
+            max-height: 95dvh !important; /* 使用动态视口高度 */
+            max-width: 392px !important; /* 宽度从 280px 增加 40% */
+            padding: 1rem !important; /* 16px，舒适的内边距 */
+        }
+
+        /* 统一字体大小为 14px（从 10px 放大 40%） */
+        #fileModal,
+        #fileModal * {
+            font-size: 0.875rem !important; /* 14px */
+        }
+
+        /* 分享面板所有间距（放大40%） */
+        #fileModal .space-y-1\.5 > * + * {
+            margin-top: 0.35rem !important; /* 约6px，从4px增加 */
+        }
+
+        /* 文件名区域（放大40%） */
+        #fileModal .bg-gray-50,
+        #fileModal .dark\:bg-gray-700 {
+            padding: 0.35rem 0.5rem !important; /* 从 4px 6px 增加 */
+        }
+
+        /* 标签（放大40%） */
+        #fileModal label {
+            margin-bottom: 0.175rem !important; /* 约3px，从2px增加 */
+        }
+
+        /* 输入框和选择框（放大40%） */
+        #fileModal input,
+        #fileModal select {
+            padding: 0.175rem 0.5rem !important; /* 从 2px 6px 增加 */
+            min-height: 28px !important; /* 从 20px 增加 */
+        }
+
+        /* 按钮（放大40%） */
+        #fileModal button {
+            padding: 0.35rem 0.5rem !important; /* 从 4px 6px 增加 */
+            min-height: 28px !important; /* 从 20px 增加 */
+        }
+
+        /* 按钮间距（放大40%） */
+        #fileModal .gap-1 {
+            gap: 0.35rem !important; /* 约6px，从4px增加 */
+        }
+
+        #fileModal .gap-1\.5 {
+            gap: 0.5rem !important; /* 8px，从6px增加 */
+        }
+
+        /* ==========================================
+           手机横屏模式优化（方案 E：终极组合）
+           ========================================== */
+        /* 精确检测：手机横屏全屏模式（排除分屏场景） */
+        @media (orientation: landscape)
+           and (max-height: 500px)
+           and (min-width: 600px)        /* 宽度至少 600px，排除分屏 */
+           and (max-width: 900px)
+           and (hover: none)
+           and (pointer: coarse) {
+
+            /* 隐藏 Header */
+            #appScreen header {
+                display: none !important;
+            }
+
+            /* 显示抽屉式菜单 */
+            #fabDrawer {
+                display: block !important;
+            }
+
+            /* 减小 main 的 padding */
+            main {
+                padding: 0.5rem !important;
+            }
+
+            /* 重新计算内容高度（去掉 Header 的 56px） */
+            main > div > div {
+                height: calc(100dvh - 16px) !important; /* 16px = padding 上下 8px * 2 */
+            }
+
+            /* 压缩卡片 header 高度 */
+            .bg-white .px-4.py-3,
+            .dark\:bg-gray-800 .px-4.py-3 {
+                padding-top: 0.375rem !important;    /* py-1.5 = 6px */
+                padding-bottom: 0.375rem !important;
+            }
+
+            /* 压缩卡片 header 字体 */
+            .bg-white .px-4.py-3 h2,
+            .dark\:bg-gray-800 .px-4.py-3 h2 {
+                font-size: 0.75rem !important; /* text-xs */
+            }
+
+            /* 压缩卡片 header 图标 */
+            .bg-white .px-4.py-3 i,
+            .dark\:bg-gray-800 .px-4.py-3 i {
+                font-size: 0.65rem !important;
+            }
+
+            /* 压缩存储信息文字 */
+            #storageInfo {
+                font-size: 0.625rem !important; /* 更小 */
+            }
+
+            /* ==========================================
+               优化 2：隐藏文件列表搜索栏
+               ========================================== */
+            /* 隐藏搜索输入框、排序、刷新按钮 */
+            #searchInput,
+            #sortBy,
+            #refreshBtn {
+                display: none !important;
+            }
+
+            /* 移除工具栏外层容器的 padding（px-4 py-2 容器）*/
+            .px-4.py-2.bg-white.flex-shrink-0,
+            .dark .px-4.py-2.dark\:bg-gray-800.flex-shrink-0 {
+                padding: 0 !important;
+            }
+
+            /* 如果工具栏为空，隐藏整个工具栏容器 */
+            .flex.items-center.justify-between.space-x-1 {
+                min-height: 0 !important;
+                padding: 0 !important;
+            }
+
+            /* ==========================================
+               优化 5：禁用文件项hover效果（修复触摸后浅蓝色背景持久化）
+               ========================================== */
+            /* 移动设备触摸后hover伪类会持久化，导致浅蓝色背景不消失 */
+            /* 使用 :not(.selected) 选择器，只在非选中状态下禁用hover */
+            .file-item:not(.selected):hover {
+                background-color: transparent !important;
+            }
+            /* 深色模式下也禁用hover效果（仅非选中状态） */
+            .dark .file-item:not(.selected):hover {
+                background-color: transparent !important;
+            }
+
+            /* 压缩文件列表项高度 */
+            .file-item {
+                padding-top: 0.25rem !important;   /* 4px，从 8px 进一步压缩 */
+                padding-bottom: 0.25rem !important; /* 4px，从 8px 进一步压缩 */
+            }
+
+            /* 压缩文件列表项字体和图标 */
+            .file-item i.fas {
+                font-size: 1rem !important; /* 16px，从 20px 压缩 */
+            }
+
+            .file-item h3 {
+                font-size: 0.6875rem !important; /* 11px，从 14px 压缩 */
+                line-height: 1.2 !important; /* 紧凑行高 */
+            }
+
+            .file-item p {
+                font-size: 0.625rem !important; /* 10px，从 12px 压缩 */
+                line-height: 1.2 !important; /* 紧凑行高 */
+            }
+
+            /* 压缩文件列表按钮 */
+            .file-item button {
+                padding: 0.25rem !important; /* 4px，从 6px 压缩 */
+            }
+
+            .file-item button i {
+                font-size: 0.75rem !important; /* 12px，从 14px 压缩 */
+            }
+
+            /* ==========================================
+               优化 4：收缩上传虚线框
+               ========================================== */
+            /* 进一步缩减虚线框高度至 35px，只显示图标 */
+            #dragArea {
+                min-height: 35px !important; /* 从 50px 进一步缩减到 35px */
+                padding: 0.25rem !important; /* 统一 padding 为 4px */
+                flex-direction: row !important;
+                gap: 0 !important; /* 移除间距 */
+            }
+
+            /* 图标居中显示 */
+            #dragArea i {
+                font-size: 1rem !important; /* 稍大的图标作为唯一视觉元素 */
+            }
+
+            /* 隐藏所有文字提示 */
+            #dragArea > div {
+                display: none !important; /* 隐藏包含文字的 div */
+            }
+
+            /* 压缩上传卡片的整体高度 */
+            .flex-\[1\] {
+                flex: 1 !important; /* 上传卡片占比 */
+            }
+
+            .flex-\[2\] {
+                flex: 2 !important; /* 文件列表占比 */
+            }
+
+            /* ==========================================
+               优化 3：精简预览信息显示（进一步优化）
+               ========================================== */
+            /* 隐藏预览区域的文件名、类型、大小、时间等所有信息 */
+            .preview-name,
+            .preview-info {
+                display: none !important;
+            }
+
+            /* 调整按钮位置，移除顶部 margin */
+            .flex.gap-2.mt-3 {
+                margin-top: 0 !important;
+            }
+        }
     </style>
     <!-- Cloudflare Turnstile -->
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
@@ -335,8 +744,9 @@
         <div class="w-full md:max-w-6xl lg:max-w-7xl mx-auto">
             <!-- 卡片式布局：桌面端左右布局，移动端上下布局 -->
             <!-- 所有设备固定高度，避免整页滚动 -->
-            <!-- 高度计算：100vh - Header(56px) - Main padding(40px) = 100vh - 96px -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 h-[calc(100vh-96px)]">
+            <!-- 高度计算：100dvh - Header(56px) - Main padding(40px) = 100dvh - 96px -->
+            <!-- 使用 dvh（动态视口高度）自动适配移动端地址栏显示/隐藏 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-5 h-[calc(100dvh-96px)]">
                 <!-- 左侧列/上方区域：上传卡片 + 文件列表卡片 -->
                 <!-- 所有设备填充高度，使用 flex 分配比例 -->
                 <div class="md:col-span-1 flex flex-col gap-5 h-full min-h-0">
@@ -348,7 +758,7 @@
                             </h2>
                         </div>
                         <div class="flex-1 flex flex-col items-center justify-center p-3 min-h-0 overflow-auto">
-                            <div id="dragArea" class="drag-area flex flex-row items-center justify-center gap-2 py-4 px-3 text-center w-full h-full min-h-[80px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+                            <div id="dragArea" class="drag-area flex flex-row items-center justify-center gap-2 p-2 text-center w-full h-full min-h-[80px] cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
                                 <i class="fas fa-upload text-sm text-gray-400 dark:text-gray-500"></i>
                                 <div class="flex flex-col items-start gap-0.5">
                                     <span class="text-[10px] font-medium text-gray-700 dark:text-gray-300" data-i18n="uploadArea">点击或拖拽</span>
@@ -432,6 +842,29 @@
         </div>
     </main>
 
+    <!-- 抽屉式菜单（仅手机横屏显示） -->
+    <div id="fabDrawer" class="fixed top-1/2 right-0 transform -translate-y-1/2 translate-x-full z-50 hidden">
+        <div class="drawer-container">
+            <!-- 触发按钮（左侧凸出部分） -->
+            <button id="drawerToggle" class="drawer-toggle">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            <!-- 功能按钮面板 -->
+            <div id="drawerPanel" class="drawer-panel">
+                <button id="drawerLang" data-i18n-title="langToggle" title="切换语言">
+                    <i class="fas fa-language"></i>
+                </button>
+                <button id="drawerTheme" data-i18n-title="themeToggle" title="切换主题">
+                    <i class="fas fa-moon dark-icon"></i>
+                    <i class="fas fa-sun light-icon hidden"></i>
+                </button>
+                <button id="drawerLogout" data-i18n-title="logout" title="登出">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- 移动端文件预览模态框 -->
     <div id="mobilePreviewModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 md:hidden flex items-center justify-center p-5">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl h-full flex flex-col overflow-hidden">
@@ -451,14 +884,14 @@
     <!-- 文件操作模态框 -->
     <div id="fileModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
         <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6">
-                <div class="flex items-center justify-between mb-4">
+            <div class="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6 flex flex-col" style="max-height: 90vh;">
+                <div class="flex items-center justify-between mb-4 flex-shrink-0">
                     <h3 id="modalTitle" class="text-lg font-semibold text-gray-900 dark:text-gray-100">文件信息</h3>
                     <button id="closeModal" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div id="modalContent"></div>
+                <div id="modalContent" class="flex-1 overflow-y-auto min-h-0"></div>
             </div>
         </div>
     </div>

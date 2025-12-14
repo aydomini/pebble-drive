@@ -24,34 +24,74 @@ jobs:
         cd backend
         npm ci
 
-    - name: Verify Backend Configuration
+    - name: Verify and Configure Backend
       run: |
         cd backend
         echo "🔍 验证后端配置..."
 
-        # Copy example config if wrangler.toml doesn't exist
+        # 1. 复制示例配置（如果不存在）
         if [ ! -f wrangler.toml ]; then
           echo "📋 从示例配置创建 wrangler.toml..."
           cp wrangler.toml.example wrangler.toml
         fi
 
-        # Get database ID dynamically from Cloudflare
-        echo "🔍 获取数据库 ID..."
+        # 2. 获取或创建 D1 数据库
+        echo "🗄️ 检查 D1 数据库..."
         DB_ID=$(npx wrangler d1 list | grep pebble-drive-db | awk '{print $2}' || echo "")
 
         if [ -z "$DB_ID" ]; then
-          echo "⚠️ 未找到数据库，将在部署时创建"
+          echo "⚠️ 未找到数据库 pebble-drive-db，正在创建..."
+          DB_ID=$(npx wrangler d1 create pebble-drive-db --json | jq -r '.database_id')
+          echo "✅ 数据库创建成功: $DB_ID"
         else
           echo "✅ 找到数据库 ID: $DB_ID"
-          # Update wrangler.toml with real database_id (works on both Linux and macOS)
-          if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s/database_id = \"your-database-id\"/database_id = \"$DB_ID\"/" wrangler.toml
-          else
-            sed -i "s/database_id = \"your-database-id\"/database_id = \"$DB_ID\"/" wrangler.toml
-          fi
         fi
 
-        echo "✅ 后端配置验证通过"
+        # 更新 wrangler.toml 中的 database_id
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -i '' "s/database_id = \".*\"/database_id = \"$DB_ID\"/" wrangler.toml
+        else
+          sed -i "s/database_id = \".*\"/database_id = \"$DB_ID\"/" wrangler.toml
+        fi
+
+        # 3. 获取或创建 KV Namespace（用于速率限制）
+        echo "🔑 检查 KV Namespace..."
+        KV_ID=$(npx wrangler kv namespace list | grep -E '"title":\s*"RATE_LIMIT"' | grep -v preview | jq -r '.id' || echo "")
+        KV_PREVIEW_ID=$(npx wrangler kv namespace list | grep -E '"title":\s*"RATE_LIMIT_preview"' | jq -r '.id' || echo "")
+
+        if [ -z "$KV_ID" ]; then
+          echo "⚠️ 未找到 RATE_LIMIT KV，正在创建..."
+          KV_ID=$(npx wrangler kv namespace create RATE_LIMIT --json | jq -r '.id')
+          echo "✅ KV Namespace 创建成功: $KV_ID"
+        else
+          echo "✅ 找到 KV ID: $KV_ID"
+        fi
+
+        if [ -z "$KV_PREVIEW_ID" ]; then
+          echo "⚠️ 未找到 RATE_LIMIT_preview KV，正在创建..."
+          KV_PREVIEW_ID=$(npx wrangler kv namespace create RATE_LIMIT --preview --json | jq -r '.id')
+          echo "✅ KV Preview Namespace 创建成功: $KV_PREVIEW_ID"
+        else
+          echo "✅ 找到 KV Preview ID: $KV_PREVIEW_ID"
+        fi
+
+        # 更新 wrangler.toml 中的 KV IDs
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          # macOS sed 语法
+          sed -i '' "/binding = \"RATE_LIMIT_KV\"/,/preview_id/ {
+            s/id = \".*\"/id = \"$KV_ID\"/
+            s/preview_id = \".*\"/preview_id = \"$KV_PREVIEW_ID\"/
+          }" wrangler.toml
+        else
+          # Linux sed 语法
+          sed -i "/binding = \"RATE_LIMIT_KV\"/,/preview_id/ {
+            s/id = \".*\"/id = \"$KV_ID\"/
+            s/preview_id = \".*\"/preview_id = \"$KV_PREVIEW_ID\"/
+          }" wrangler.toml
+        fi
+
+        echo "✅ 后端配置验证完成"
+        cat wrangler.toml
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -65,11 +105,11 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-    - name: Initialize Database
+    - name: Initialize Database Schema
       run: |
         cd backend
         echo "🗃️ 初始化数据库表结构..."
-        npx wrangler d1 execute pebble-drive-db --file=./migrations/schema.sql || echo "数据库表已存在或初始化失败（可能已存在）"
+        npx wrangler d1 execute pebble-drive-db --file=./migrations/schema.sql || echo "⚠️ 数据库表已存在或初始化失败（可能已存在）"
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -104,6 +144,7 @@ jobs:
         cd backend
         # 从 wrangler.toml 获取 worker 名称
         WORKER_NAME=$(grep '^name = ' wrangler.toml | sed 's/name = "\(.*\)"/\1/')
+
         # 获取 Cloudflare 账户的子域名
         SUBDOMAIN=$(npx wrangler whoami 2>/dev/null | grep 'subdomain' | awk '{print $2}' || echo "")
 
@@ -131,6 +172,25 @@ jobs:
         VITE_API_BASE_URL: ${{ steps.worker-url.outputs.worker_url }}
         VITE_TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
 
+    - name: Verify Build Output
+      run: |
+        cd frontend
+        echo "🔍 验证构建输出..."
+
+        # 检查环境变量是否正确注入
+        if grep -q "ENV_API_BASE_URL = '${{ steps.worker-url.outputs.worker_url }}'" dist/index.html; then
+          echo "✅ API_BASE_URL 注入成功"
+        else
+          echo "❌ API_BASE_URL 注入失败"
+          exit 1
+        fi
+
+        if grep -q "VITE_TURNSTILE_SITE_KEY = '${{ secrets.TURNSTILE_SITE_KEY }}'" dist/index.html; then
+          echo "✅ TURNSTILE_SITE_KEY 注入成功"
+        else
+          echo "⚠️ TURNSTILE_SITE_KEY 注入失败（可能未配置）"
+        fi
+
     - name: Deploy Frontend to Cloudflare Pages
       run: |
         cd frontend
@@ -151,18 +211,29 @@ jobs:
         echo "   🔧 后端 API: ${{ steps.worker-url.outputs.worker_url }}"
         echo "   🎨 前端应用: 查看上方 Pages 部署输出获取 URL"
         echo ""
-        echo "⚠️  重要：首次部署后，请设置以下 Secrets："
+        echo "⚠️  重要提醒：首次部署后需要配置 Worker Secrets"
         echo ""
-        echo "   1. Worker Secrets（后端密钥）："
-        echo "      wrangler secret put AUTH_PASSWORD"
-        echo "      wrangler secret put AUTH_TOKEN_SECRET"
-        echo "      wrangler secret put TURNSTILE_SECRET_KEY"
-        echo "      wrangler secret put STORAGE_QUOTA_GB"
+        echo "📌 必需的 Worker Secrets（后端密钥）："
+        echo "   1. AUTH_PASSWORD          - 登录密码（必需）"
+        echo "   2. AUTH_TOKEN_SECRET      - JWT 密钥，32位随机字符串（必需）"
+        echo "   3. TURNSTILE_SECRET_KEY   - Turnstile 验证密钥（必需）"
         echo ""
-        echo "   2. GitHub Secrets（前端构建）："
-        echo "      TURNSTILE_SITE_KEY - Turnstile 站点密钥"
-        echo "      （在仓库 Settings → Secrets → Actions 中添加）"
+        echo "🔧 配置命令（在本地运行）："
+        echo "   cd backend"
+        echo "   echo 'your-password' | npx wrangler secret put AUTH_PASSWORD"
+        echo "   openssl rand -base64 32 | npx wrangler secret put AUTH_TOKEN_SECRET"
+        echo "   echo 'your-turnstile-secret' | npx wrangler secret put TURNSTILE_SECRET_KEY"
         echo ""
-        echo "   3. 获取 Turnstile 密钥："
-        echo "      访问 https://dash.cloudflare.com/?to=/:account/turnstile"
-        echo "      创建站点后获取 Site Key 和 Secret Key"
+        echo "📌 必需的 GitHub Secrets（前端构建）："
+        echo "   CLOUDFLARE_API_TOKEN      - 已配置 ✅"
+        echo "   CLOUDFLARE_ACCOUNT_ID     - 已配置 ✅"
+        echo "   TURNSTILE_SITE_KEY        - Turnstile 站点密钥"
+        echo "   PAGES_PROJECT_NAME        - Pages 项目名（可选，默认 pebble-drive）"
+        echo ""
+        echo "🔑 获取 Turnstile 密钥："
+        echo "   访问 https://dash.cloudflare.com/?to=/:account/turnstile"
+        echo "   创建站点后获取 Site Key 和 Secret Key"
+        echo ""
+        echo "📝 更多配置说明："
+        echo "   - 查看 backend/wrangler.toml 调整文件大小限制、速率限制等"
+        echo "   - 所有环境变量都在 wrangler.toml [vars] 部分"

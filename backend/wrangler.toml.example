@@ -71,6 +71,6 @@ database_id = "your-database-id-here"  # 替换为你的 D1 数据库 ID
 # KV Namespace（速率限制存储）
 [[kv_namespaces]]
 binding = "RATE_LIMIT_KV"
-id = "your-kv-id-here"  # 通过 wrangler kv namespace create RATE_LIMIT_KV 创建
-preview_id = "your-preview-kv-id-here"  # 通过 wrangler kv namespace create RATE_LIMIT_KV --preview 创建
+id = "your-kv-id-here"  # 通过 wrangler kv namespace create RATE_LIMIT 创建，或由 GitHub Actions 自动创建
+preview_id = "your-preview-kv-id-here"  # 通过 wrangler kv namespace create RATE_LIMIT --preview 创建
 
