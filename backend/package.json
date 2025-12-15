@@ -1,6 +1,6 @@
 {
   "name": "pebbledrive-backend",
-  "version": "1.0.0",
+  "version": "1.3.2",
   "description": "PebbleDrive 后端API - Cloudflare Workers",
   "type": "module",
   "main": "src/index.js",

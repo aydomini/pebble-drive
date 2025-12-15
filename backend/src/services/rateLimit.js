@@ -1,27 +1,51 @@
 /**
  * 速率限制服务 - 使用 Cloudflare KV
+ *
+ * 采用渐进式惩罚策略：
+ * - 阶段 1（轻度）：3 次失败/5分钟 → 锁定 1 分钟
+ * - 阶段 2（中度）：6 次失败/15分钟 → 锁定 5 分钟
+ * - 阶段 3（重度）：10 次失败/1小时 → 锁定 30 分钟
  */
 
 const RATE_LIMIT_CONFIG = {
-    // IP 速率限制：每个 IP 每 5 分钟最多 5 次登录尝试
-    loginAttemptsPerWindow: 5,
-    rateLimitWindow: 300, // 5 分钟（秒）
-    loginBlockDuration: 900, // 15 分钟（秒）
+    // 阶段 1：轻度警告（可能是手误）
+    light: {
+        maxAttempts: 3,
+        windowSeconds: 300,      // 5 分钟
+        penaltySeconds: 60,      // 锁定 1 分钟
+        message: "密码错误 3 次，请 1 分钟后重试"
+    },
 
-    // 账户锁定：3 次失败后锁定
-    maxLoginFailures: 3,
-    accountLockDuration: 60 // 60 秒
+    // 阶段 2：中度防护（疑似攻击）
+    medium: {
+        maxAttempts: 6,          // 累计 6 次
+        windowSeconds: 900,      // 15 分钟
+        penaltySeconds: 300,     // 锁定 5 分钟
+        message: "检测到异常行为，IP 已锁定 5 分钟"
+    },
+
+    // 阶段 3：严厉打击（确认攻击）
+    heavy: {
+        maxAttempts: 10,         // 累计 10 次
+        windowSeconds: 3600,     // 1 小时
+        penaltySeconds: 1800,    // 锁定 30 分钟
+        message: "检测到暴力破解，IP 已锁定 30 分钟"
+    }
 };
 
 /**
- * 检查 IP 速率限制
+ * 检查 IP 速率限制（渐进式惩罚）
+ * @param {Object} env - 环境变量
+ * @param {string} ip - 客户端 IP
+ * @returns {Promise<Object>} - { allowed: boolean, stage: string, message: string, remainingSeconds: number }
  */
 export async function checkIPRateLimit(env, ip) {
-    const key = `ip_rate:${ip}`;
+    const key = `login_rate:${ip}`;
     const data = await env.RATE_LIMIT_KV.get(key, 'json');
 
     if (!data) {
-        return { allowed: true, remaining: RATE_LIMIT_CONFIG.loginAttemptsPerWindow };
+        // 首次登录尝试
+        return { allowed: true, stage: null, attempts: 0 };
     }
 
     const now = Date.now();
@@ -31,130 +55,117 @@ export async function checkIPRateLimit(env, ip) {
         const remainingSeconds = Math.ceil((data.blockedUntil - now) / 1000);
         return {
             allowed: false,
-            reason: 'ip_blocked',
+            stage: data.stage,
+            message: data.message || '登录已被锁定',
             remainingSeconds,
-            message: `IP 已被锁定，请 ${remainingSeconds} 秒后重试`
+            attempts: data.attempts || 0
         };
     }
 
-    // 检查速率限制窗口（5 分钟）
-    const windowStart = now - (RATE_LIMIT_CONFIG.rateLimitWindow * 1000);
-    const recentAttempts = (data.attempts || []).filter(t => t > windowStart);
+    // 清理过期的尝试记录
+    const attempts = (data.attempts || []).filter(timestamp => {
+        // 保留 1 小时内的所有尝试记录（用于最严格的阶段判断）
+        return (now - timestamp) < RATE_LIMIT_CONFIG.heavy.windowSeconds * 1000;
+    });
 
-    if (recentAttempts.length >= RATE_LIMIT_CONFIG.loginAttemptsPerWindow) {
-        // 超过速率限制，锁定 IP
-        const blockedUntil = now + (RATE_LIMIT_CONFIG.loginBlockDuration * 1000);
+    // 判断当前应该触发哪个阶段的限制
+    const stage = determineStage(attempts, now);
+
+    if (stage) {
+        const config = RATE_LIMIT_CONFIG[stage];
+        // 触发速率限制，锁定 IP
+        const blockedUntil = now + (config.penaltySeconds * 1000);
+
         await env.RATE_LIMIT_KV.put(key, JSON.stringify({
-            attempts: [],
-            blockedUntil
-        }), { expirationTtl: RATE_LIMIT_CONFIG.loginBlockDuration });
+            attempts,
+            blockedUntil,
+            stage,
+            message: config.message
+        }), {
+            expirationTtl: config.penaltySeconds + RATE_LIMIT_CONFIG.heavy.windowSeconds
+        });
 
         return {
             allowed: false,
-            reason: 'rate_limit_exceeded',
-            remainingSeconds: RATE_LIMIT_CONFIG.loginBlockDuration,
-            message: `登录尝试过于频繁，IP 已被锁定 ${RATE_LIMIT_CONFIG.loginBlockDuration / 60} 分钟`
+            stage,
+            message: config.message,
+            remainingSeconds: config.penaltySeconds,
+            attempts: attempts.length
         };
     }
 
+    // 未触发限制
     return {
         allowed: true,
-        remaining: RATE_LIMIT_CONFIG.loginAttemptsPerWindow - recentAttempts.length
+        stage: null,
+        attempts: attempts.length
     };
+}
+
+/**
+ * 判断应该触发哪个阶段的限制
+ * @param {Array<number>} attempts - 尝试时间戳数组
+ * @param {number} now - 当前时间戳
+ * @returns {string|null} - 'heavy' | 'medium' | 'light' | null
+ */
+function determineStage(attempts, now) {
+    // 检查阶段 3（重度）：1 小时内 10 次
+    const heavyWindow = now - (RATE_LIMIT_CONFIG.heavy.windowSeconds * 1000);
+    const heavyAttempts = attempts.filter(t => t > heavyWindow);
+    if (heavyAttempts.length >= RATE_LIMIT_CONFIG.heavy.maxAttempts) {
+        return 'heavy';
+    }
+
+    // 检查阶段 2（中度）：15 分钟内 6 次
+    const mediumWindow = now - (RATE_LIMIT_CONFIG.medium.windowSeconds * 1000);
+    const mediumAttempts = attempts.filter(t => t > mediumWindow);
+    if (mediumAttempts.length >= RATE_LIMIT_CONFIG.medium.maxAttempts) {
+        return 'medium';
+    }
+
+    // 检查阶段 1（轻度）：5 分钟内 3 次
+    const lightWindow = now - (RATE_LIMIT_CONFIG.light.windowSeconds * 1000);
+    const lightAttempts = attempts.filter(t => t > lightWindow);
+    if (lightAttempts.length >= RATE_LIMIT_CONFIG.light.maxAttempts) {
+        return 'light';
+    }
+
+    return null; // 未触发任何限制
 }
 
 /**
  * 记录 IP 登录尝试
+ * @param {Object} env - 环境变量
+ * @param {string} ip - 客户端 IP
+ * @param {boolean} success - 是否登录成功
  */
 export async function recordIPAttempt(env, ip, success) {
-    const key = `ip_rate:${ip}`;
-    const data = await env.RATE_LIMIT_KV.get(key, 'json') || { attempts: [] };
-
-    const now = Date.now();
-    const windowStart = now - (RATE_LIMIT_CONFIG.rateLimitWindow * 1000); // 5 分钟窗口
-
-    // 清理旧记录，只保留最近 5 分钟的
-    const recentAttempts = (data.attempts || []).filter(t => t > windowStart);
+    const key = `login_rate:${ip}`;
 
     if (success) {
-        // 登录成功，清空记录
-        await env.RATE_LIMIT_KV.delete(key);
-    } else {
-        // 登录失败，记录尝试
-        recentAttempts.push(now);
-        await env.RATE_LIMIT_KV.put(key, JSON.stringify({
-            attempts: recentAttempts
-        }), { expirationTtl: RATE_LIMIT_CONFIG.rateLimitWindow }); // 5 分钟过期
-    }
-}
-
-/**
- * 检查账户锁定状态
- */
-export async function checkAccountLock(env) {
-    const key = 'account_lock';
-    const data = await env.RATE_LIMIT_KV.get(key, 'json');
-
-    if (!data) {
-        return { locked: false, failures: 0 };
-    }
-
-    const now = Date.now();
-
-    // 检查是否被锁定
-    if (data.lockedUntil && now < data.lockedUntil) {
-        const remainingSeconds = Math.ceil((data.lockedUntil - now) / 1000);
-        return {
-            locked: true,
-            remainingSeconds,
-            message: `账户已被锁定，请 ${remainingSeconds} 秒后重试`
-        };
-    }
-
-    // 锁定已过期，重置失败次数
-    if (data.lockedUntil && now >= data.lockedUntil) {
-        await env.RATE_LIMIT_KV.delete(key);
-        return { locked: false, failures: 0 };
-    }
-
-    return { locked: false, failures: data.failures || 0 };
-}
-
-/**
- * 记录账户登录失败
- */
-export async function recordAccountFailure(env, success) {
-    const key = 'account_lock';
-
-    if (success) {
-        // 登录成功，清空失败记录
+        // 登录成功，清空所有记录
         await env.RATE_LIMIT_KV.delete(key);
         return;
     }
 
-    const data = await env.RATE_LIMIT_KV.get(key, 'json') || { failures: 0 };
-    const failures = (data.failures || 0) + 1;
+    // 登录失败，记录尝试
+    const data = await env.RATE_LIMIT_KV.get(key, 'json') || { attempts: [] };
+    const now = Date.now();
 
-    if (failures >= RATE_LIMIT_CONFIG.maxLoginFailures) {
-        // 达到失败次数上限，锁定账户
-        const now = Date.now();
-        const lockedUntil = now + (RATE_LIMIT_CONFIG.accountLockDuration * 1000);
+    // 清理 1 小时之前的旧记录
+    const attempts = (data.attempts || []).filter(timestamp => {
+        return (now - timestamp) < RATE_LIMIT_CONFIG.heavy.windowSeconds * 1000;
+    });
 
-        await env.RATE_LIMIT_KV.put(key, JSON.stringify({
-            failures,
-            lockedUntil
-        }), { expirationTtl: RATE_LIMIT_CONFIG.accountLockDuration });
-    } else {
-        // 记录失败次数
-        await env.RATE_LIMIT_KV.put(key, JSON.stringify({
-            failures
-        }), { expirationTtl: 300 }); // 5 分钟过期
-    }
+    // 添加当前尝试
+    attempts.push(now);
 
-    return {
-        failures,
-        remainingAttempts: RATE_LIMIT_CONFIG.maxLoginFailures - failures
-    };
+    // 保存到 KV，TTL 设置为 1 小时（覆盖最长窗口）
+    await env.RATE_LIMIT_KV.put(key, JSON.stringify({
+        attempts
+    }), {
+        expirationTtl: RATE_LIMIT_CONFIG.heavy.windowSeconds
+    });
 }
 
 /**

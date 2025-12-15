@@ -1,7 +1,7 @@
 /**
  * 应用版本信息
  */
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.3.2';
 const GITHUB_REPO_URL = 'https://github.com/aydomini/pebble-drive';
 
 /**
@@ -469,6 +469,10 @@ class I18nManager {
                 optional: '可选',
                 times: '次',
                 passwordMustBeAlphanumeric: '密码只能包含数字和字母',
+                linkType: '链接类型',
+                standardLink: '标准链接',
+                shortLink: '短链接',
+                shortLinkNotConfigured: '短链接未配置',
 
                 // 存储信息
                 totalUsed: '已使用',
@@ -642,6 +646,10 @@ class I18nManager {
                 optional: 'Optional',
                 times: 'times',
                 passwordMustBeAlphanumeric: 'Password must be alphanumeric',
+                linkType: 'Link Type',
+                standardLink: 'Standard Link',
+                shortLink: 'Short Link',
+                shortLinkNotConfigured: 'Short link not configured',
 
                 // Storage info
                 totalUsed: 'Used',
@@ -944,6 +952,10 @@ class PebbleDrive {
         this.searchTerm = '';
         this.sortBy = 'uploadDate';
         this.sortOrder = 'desc';
+
+        // 短链接可用性（从 localStorage 读取，如果没有则默认为 true）
+        const storedShortLinkStatus = localStorage.getItem('pebbledrive_short_link_available');
+        this.shortLinkAvailable = storedShortLinkStatus === null ? true : storedShortLinkStatus === 'true';
 
         // 登录失败限制（前端限制，已移至后端）
         // this.loginAttempts = 0;
@@ -2728,14 +2740,23 @@ class PebbleDrive {
                     </div>
                 </div>
 
-                <!-- 访问密码 -->
-                <div>
-                    <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">${this.i18n.t('accessPassword')}</label>
-                    <input type="text"
-                           id="sharePasswordInput"
-                           maxlength="16"
-                           class="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-                           placeholder="${this.i18n.t('optional')}">
+                <!-- 链接类型 和 访问密码（同一行） -->
+                <div class="grid grid-cols-2 gap-1.5">
+                    <div>
+                        <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">${this.i18n.t('linkType')}</label>
+                        <select id="shareLinkTypeSelect" class="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+                            <option value="standard" selected>${this.i18n.t('standardLink')}</option>
+                            <option value="short" ${this.shortLinkAvailable === false ? 'disabled' : ''}>${this.i18n.t('shortLink')}${this.shortLinkAvailable === false ? ' (' + this.i18n.t('shortLinkNotConfigured') + ')' : ''}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-gray-600 dark:text-gray-400 mb-0.5">${this.i18n.t('accessPassword')}</label>
+                        <input type="text"
+                               id="sharePasswordInput"
+                               maxlength="16"
+                               class="w-full px-1.5 py-0.5 border border-gray-300 dark:border-gray-600 rounded text-xs dark:bg-gray-700 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                               placeholder="${this.i18n.t('optional')}">
+                    </div>
                 </div>
 
                 <!-- 按钮 -->
@@ -2782,6 +2803,9 @@ class PebbleDrive {
                 options.password = password;
             }
 
+            // 获取用户选择的链接类型
+            const linkType = document.getElementById('shareLinkTypeSelect').value;
+
             // 调用 API 创建分享链接
             const response = await fetch(`${this.apiEndpoint}/share`, {
                 method: 'POST',
@@ -2798,14 +2822,34 @@ class PebbleDrive {
 
             const data = await response.json();
 
+            // 根据用户选择的链接类型决定使用哪个链接
+            let linkToCopy;
+            if (linkType === 'short') {
+                if (data.shortUrl) {
+                    // 短链接可用
+                    linkToCopy = data.shortUrl;
+                } else {
+                    // 短链接未配置，降级到标准链接
+                    linkToCopy = data.shareUrl;
+                    // 记录短链接不可用状态
+                    this.shortLinkAvailable = false;
+                    localStorage.setItem('pebbledrive_short_link_available', 'false');
+                    // 可选：提示用户短链接未配置
+                    console.warn('Short link not configured on backend, falling back to standard link');
+                }
+            } else {
+                // 使用标准链接
+                linkToCopy = data.shareUrl;
+            }
+
             // 复制链接到剪贴板（兼容 Safari）
             try {
                 if (navigator.clipboard && navigator.clipboard.writeText) {
-                    await navigator.clipboard.writeText(data.shareUrl);
+                    await navigator.clipboard.writeText(linkToCopy);
                 } else {
                     // 降级方案：使用传统方法
                     const textArea = document.createElement('textarea');
-                    textArea.value = data.shareUrl;
+                    textArea.value = linkToCopy;
                     textArea.style.position = 'fixed';
                     textArea.style.left = '-999999px';
                     textArea.style.top = '-999999px';
@@ -2818,7 +2862,7 @@ class PebbleDrive {
             } catch (clipboardError) {
                 // 如果复制失败，显示分享链接供用户手动复制
                 console.warn('Clipboard failed:', clipboardError);
-                this.showShareLinkModal(data.shareUrl);
+                this.showShareLinkModal(linkToCopy);
                 return; // 不继续执行后续的 toast 和 hideModal
             }
 

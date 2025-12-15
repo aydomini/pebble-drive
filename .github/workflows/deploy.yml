@@ -161,15 +161,41 @@ jobs:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+    - name: Configure Pages Functions
+      run: |
+        cd frontend
+        echo "⚙️ 配置 Pages Functions 代理..."
+
+        # 复制配置模板
+        if [ -f wrangler.toml.example ]; then
+          cp wrangler.toml.example wrangler.toml
+          echo "✅ 已创建 wrangler.toml"
+        fi
+
+        # 更新 BACKEND_URL
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+          sed -i '' "s|BACKEND_URL = \".*\"|BACKEND_URL = \"${{ steps.worker-url.outputs.worker_url }}\"|g" wrangler.toml
+        else
+          sed -i "s|BACKEND_URL = \".*\"|BACKEND_URL = \"${{ steps.worker-url.outputs.worker_url }}\"|g" wrangler.toml
+        fi
+
+        echo "✅ Pages Functions 配置完成"
+        echo "   BACKEND_URL: ${{ steps.worker-url.outputs.worker_url }}"
+
     - name: Build Frontend
       run: |
         cd frontend
         echo "🏗️ 构建前端..."
-        echo "📡 API 地址: ${{ steps.worker-url.outputs.worker_url }}"
+        echo "📡 API 地址: (使用 Pages Functions 代理)"
         echo "🔐 Turnstile Site Key: ${TURNSTILE_SITE_KEY:0:10}..."
         npm run build
+
+        # 🔴 关键步骤：复制 Pages Functions 到构建产物
+        echo "📦 复制 Pages Functions..."
+        cp -r functions dist/_functions
+        echo "✅ Functions 复制完成（复制到 dist/_functions）"
       env:
-        VITE_API_BASE_URL: ${{ steps.worker-url.outputs.worker_url }}
+        VITE_API_BASE_URL: ''
         VITE_TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY }}
 
     - name: Verify Build Output
@@ -177,11 +203,29 @@ jobs:
         cd frontend
         echo "🔍 验证构建输出..."
 
-        # 检查环境变量是否正确注入
-        if grep -q "ENV_API_BASE_URL = '${{ steps.worker-url.outputs.worker_url }}'" dist/index.html; then
-          echo "✅ API_BASE_URL 注入成功"
+        # 检查环境变量是否正确注入（API_BASE_URL 应为空字符串）
+        if grep -q "ENV_API_BASE_URL = ''" dist/index.html; then
+          echo "✅ API_BASE_URL 注入成功（空字符串，使用 Pages Functions 代理）"
         else
           echo "❌ API_BASE_URL 注入失败"
+          exit 1
+        fi
+
+        # 🔴 关键验证：检查 Pages Functions 是否复制成功
+        if [ -d "dist/_functions" ]; then
+          echo "✅ Pages Functions 目录存在（dist/_functions）"
+          echo "   函数列表:"
+          ls -la dist/_functions/
+
+          # 统计 .js 文件数量
+          FUNCTIONS_COUNT=$(find dist/_functions -name "*.js" | wc -l | tr -d ' ')
+          echo "✅ 找到 $FUNCTIONS_COUNT 个 Functions 文件"
+        else
+          echo "❌ Pages Functions 目录不存在（dist/_functions）"
+          echo "⚠️ 这将导致严重的安全问题："
+          echo "   - 分享链接可以绕过下载次数限制"
+          echo "   - 过期链接依然可以访问"
+          echo "   - 密码保护失效"
           exit 1
         fi
 

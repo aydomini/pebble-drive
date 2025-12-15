@@ -1,6 +1,6 @@
 // PebbleDrive Service Worker
 // 版本号：用于缓存更新控制
-const CACHE_VERSION = 'pebbledrive-v1.3.1';
+const CACHE_VERSION = 'pebbledrive-v1.3.2';
 const CACHE_NAME = `${CACHE_VERSION}`;
 
 // 需要缓存的静态资源

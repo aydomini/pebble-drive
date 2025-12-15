@@ -279,6 +279,7 @@ async function main() {
     title('步骤 3/5: 更新配置文件');
 
     const backendDir = path.join(process.cwd(), 'backend');
+    const frontendDir = path.join(process.cwd(), 'frontend');
     const wranglerToml = path.join(backendDir, 'wrangler.toml');
     const wranglerExample = path.join(backendDir, 'wrangler.toml.example');
 
@@ -333,13 +334,31 @@ async function main() {
 
     const turnstileKey = await question('Turnstile Site Key（可选，回车跳过）：');
 
-    info('正在构建前端...');
-    const frontendDir = path.join(process.cwd(), 'frontend');
+    // 配置 Pages Functions
+    info('正在配置 Pages Functions 代理...');
+    const frontendWranglerToml = path.join(frontendDir, 'wrangler.toml');
+    const frontendWranglerExample = path.join(frontendDir, 'wrangler.toml.example');
 
-    // 设置环境变量并构建
+    if (!fs.existsSync(frontendWranglerToml) && fs.existsSync(frontendWranglerExample)) {
+        fs.copyFileSync(frontendWranglerExample, frontendWranglerToml);
+        success('已创建 frontend/wrangler.toml');
+    }
+
+    if (fs.existsSync(frontendWranglerToml)) {
+        let frontendToml = fs.readFileSync(frontendWranglerToml, 'utf-8');
+        frontendToml = frontendToml.replace(/BACKEND_URL = ".*"/g, `BACKEND_URL = "${workerUrl}"`);
+        fs.writeFileSync(frontendWranglerToml, frontendToml);
+        success(`Pages Functions 配置完成：${workerUrl}`);
+    } else {
+        warning('未找到 wrangler.toml.example，跳过 Pages Functions 配置');
+    }
+
+    info('正在构建前端...');
+
+    // 设置环境变量并构建（VITE_API_BASE_URL 为空字符串，使用 Pages Functions 代理）
     const buildEnv = {
         ...process.env,
-        VITE_API_BASE_URL: workerUrl
+        VITE_API_BASE_URL: ''
     };
     if (turnstileKey) {
         buildEnv.VITE_TURNSTILE_SITE_KEY = turnstileKey;
@@ -352,6 +371,43 @@ async function main() {
         process.exit(1);
     }
     success('前端构建成功');
+
+    // 🔴 关键步骤：复制 Pages Functions 到构建产物
+    info('正在复制 Pages Functions...');
+    const functionsSource = path.join(frontendDir, 'functions');
+    const functionsDest = path.join(frontendDir, 'dist', '_functions');
+
+    if (fs.existsSync(functionsSource)) {
+        // 递归复制目录
+        function copyDir(src, dest) {
+            if (!fs.existsSync(dest)) {
+                fs.mkdirSync(dest, { recursive: true });
+            }
+            const entries = fs.readdirSync(src, { withFileTypes: true });
+            for (let entry of entries) {
+                const srcPath = path.join(src, entry.name);
+                const destPath = path.join(dest, entry.name);
+                if (entry.isDirectory()) {
+                    copyDir(srcPath, destPath);
+                } else {
+                    fs.copyFileSync(srcPath, destPath);
+                }
+            }
+        }
+        copyDir(functionsSource, functionsDest);
+        success('Pages Functions 复制完成（复制到 dist/_functions）');
+
+        // 验证复制成功
+        const jsFiles = fs.readdirSync(functionsDest, { recursive: true })
+            .filter(f => f.endsWith('.js'));
+        info(`找到 ${jsFiles.length} 个 Functions 文件`);
+    } else {
+        warning('未找到 functions 目录，跳过复制');
+        warning('⚠️  这将导致严重的安全问题：');
+        warning('   - 分享链接可以绕过下载次数限制');
+        warning('   - 过期链接依然可以访问');
+        warning('   - 密码保护失效');
+    }
 
     info('正在部署前端到 Cloudflare Pages...');
 

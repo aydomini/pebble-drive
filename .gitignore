@@ -22,6 +22,8 @@ dist/
 # Wrangler config with secrets (use wrangler.toml.example instead)
 # Prevent committing personal database_id and other sensitive info
 backend/wrangler.toml
+frontend/wrangler.toml
+short-link-proxy/wrangler.toml
 
 # IDE
 .vscode/
@@ -56,3 +58,9 @@ CLAUDE.md
 
 # Claude Code settings (local development configuration)
 .claude/
+
+# Short link proxy (local development only)
+short-link-proxy/
+
+# WAF configuration tools (optional, local use only)
+backend/tools/

@@ -2,8 +2,6 @@ import { generateToken } from '../middleware/auth.js';
 import {
     checkIPRateLimit,
     recordIPAttempt,
-    checkAccountLock,
-    recordAccountFailure,
     getClientIP
 } from '../services/rateLimit.js';
 import { verifyTurnstile } from '../services/turnstile.js';
@@ -40,29 +38,17 @@ export async function handleLogin(request, env) {
         // 获取客户端 IP
         const clientIP = getClientIP(request);
 
-        // 1. 检查 IP 速率限制
-        const ipCheck = await checkIPRateLimit(env, clientIP);
-        if (!ipCheck.allowed) {
+        // 检查 IP 速率限制（渐进式惩罚）
+        const rateCheck = await checkIPRateLimit(env, clientIP);
+        if (!rateCheck.allowed) {
             return new Response(JSON.stringify({
                 error: 'Rate Limit Exceeded',
-                message: ipCheck.message,
-                remainingSeconds: ipCheck.remainingSeconds,
-                reason: ipCheck.reason
+                message: rateCheck.message,
+                remainingSeconds: rateCheck.remainingSeconds,
+                stage: rateCheck.stage,
+                attempts: rateCheck.attempts
             }), {
                 status: 429,
-                headers: { 'Content-Type': 'application/json' }
-            });
-        }
-
-        // 2. 检查账户锁定状态
-        const accountCheck = await checkAccountLock(env);
-        if (accountCheck.locked) {
-            return new Response(JSON.stringify({
-                error: 'Account Locked',
-                message: accountCheck.message,
-                remainingSeconds: accountCheck.remainingSeconds
-            }), {
-                status: 423,
                 headers: { 'Content-Type': 'application/json' }
             });
         }
@@ -108,17 +94,14 @@ export async function handleLogin(request, env) {
         if (!passwordCorrect) {
             // 记录失败尝试
             await recordIPAttempt(env, clientIP, false);
-            const accountResult = await recordAccountFailure(env, false);
 
-            let message = '密码错误';
-            if (accountResult && accountResult.remainingAttempts !== undefined) {
-                message += ` (剩余尝试次数: ${accountResult.remainingAttempts})`;
-            }
+            // 获取当前尝试次数（用于提示用户）
+            const updatedCheck = await checkIPRateLimit(env, clientIP);
 
             return new Response(JSON.stringify({
                 error: 'Unauthorized',
-                message,
-                remainingAttempts: accountResult?.remainingAttempts
+                message: '密码错误',
+                attempts: updatedCheck.attempts || 0
             }), {
                 status: 401,
                 headers: { 'Content-Type': 'application/json' }
@@ -127,7 +110,6 @@ export async function handleLogin(request, env) {
 
         // 登录成功 - 清除失败记录
         await recordIPAttempt(env, clientIP, true);
-        await recordAccountFailure(env, true);
 
         // 生成 token
         const token = await generateToken(env.AUTH_TOKEN_SECRET);

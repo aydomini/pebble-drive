@@ -41,10 +41,14 @@ export async function handleShare(request, env) {
             return createErrorResponse('Failed to generate unique share token', 500);
         }
 
-        // 使用自定义域名（如果配置）或当前请求 URL
-        const customDomain = env.SHARE_DOMAIN;
-        const baseUrl = customDomain || request.url.replace('/api/share', '');
+        // 生成标准分享链接
+        const shareDomain = env.SHARE_DOMAIN;
+        const baseUrl = shareDomain || request.url.replace('/api/share', '');
         const shareUrl = baseUrl + '/share/' + shareToken;
+
+        // 生成短链接（如果配置了 SHORT_DOMAIN）
+        const shortDomain = env.SHORT_DOMAIN;
+        const shortUrl = shortDomain ? `${shortDomain}/${shareToken}` : null;
 
         // 计算过期时间
         let expiresAt = null;
@@ -65,7 +69,14 @@ export async function handleShare(request, env) {
             expiresAt: expiresAt
         });
 
-        return new Response(JSON.stringify({ shareUrl }), {
+        // 返回分享链接（包含标准链接和短链接）
+        const response = {
+            shareUrl: shareUrl,
+            shortUrl: shortUrl,  // 可能为 null（如果未配置 SHORT_DOMAIN）
+            token: shareToken
+        };
+
+        return new Response(JSON.stringify(response), {
             status: 200,
             headers: {
                 'Content-Type': 'application/json',
@@ -88,17 +99,44 @@ export async function handleShareAccess(request, env, shareToken) {
         const share = await getShareRecord(env, shareToken);
 
         if (!share) {
-            return new Response('分享链接不存在或已过期', { status: 404 });
+            return new Response(getErrorPage(404, '分享链接不存在', 'Share Link Not Found'), {
+                status: 404,
+                headers: {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                    'X-Response-Time': Date.now().toString()
+                }
+            });
         }
 
         // 检查是否过期
         if (share.expiresAt && new Date(share.expiresAt) < new Date()) {
-            return new Response('分享链接已过期', { status: 410 });
+            return new Response(getErrorPage(410, '分享链接已过期', 'Share Link Expired'), {
+                status: 410,
+                headers: {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                    'X-Response-Time': Date.now().toString()
+                }
+            });
         }
 
         // 检查下载次数限制
         if (share.downloadLimit && share.downloadCount >= share.downloadLimit) {
-            return new Response('下载次数已达上限', { status: 403 });
+            return new Response(getErrorPage(403, '下载次数已达上限', 'Download Limit Exceeded'), {
+                status: 403,
+                headers: {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                    'X-Response-Time': Date.now().toString()
+                }
+            });
         }
 
         // 如果有密码保护
@@ -106,7 +144,13 @@ export async function handleShareAccess(request, env, shareToken) {
             // GET 请求：显示密码输入页面
             if (request.method === 'GET') {
                 return new Response(getPasswordPage(shareToken), {
-                    headers: { 'Content-Type': 'text/html; charset=utf-8' }
+                    headers: {
+                        'Content-Type': 'text/html; charset=utf-8',
+                        'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+                        'Pragma': 'no-cache',
+                        'Expires': '0',
+                        'X-Response-Time': Date.now().toString()
+                    }
                 });
             }
 
@@ -179,6 +223,15 @@ export async function handleShareAccess(request, env, shareToken) {
         headers.set('Content-Disposition', 'attachment; filename="' + encodeURIComponent(file.name) + '"');
         headers.set('Access-Control-Allow-Origin', '*');
 
+        // 禁用缓存（防止 Cloudflare 缓存绕过下载次数限制）
+        headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0');
+        headers.set('Pragma', 'no-cache');
+        headers.set('Expires', '0');
+
+        // 添加时间戳，确保每次响应都是唯一的
+        headers.set('X-Download-Time', Date.now().toString());
+        headers.set('X-Share-Token', shareToken);
+
         return new Response(r2File.body, { headers });
 
     } catch (error) {
@@ -194,6 +247,12 @@ function getPasswordPage(shareToken) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>密码保护 - PebbleDrive</title>
+
+    <!-- 强制禁用缓存的 Meta 标签 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -201,6 +260,31 @@ function getPasswordPage(shareToken) {
         }
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- 防止 BFCache（往返缓存） -->
+    <script>
+        // 检测页面是否从 BFCache 恢复（浏览器前进/后退）
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted) {
+                // 页面从 BFCache 恢复，强制刷新
+                console.log('[Anti-Cache] Detected BFCache, forcing reload...');
+                window.location.reload();
+            }
+        });
+
+        // 检测页面是否从磁盘缓存加载
+        window.addEventListener('load', function() {
+            const perfEntries = performance.getEntriesByType('navigation');
+            if (perfEntries.length > 0) {
+                const navEntry = perfEntries[0];
+                if (navEntry.type === 'back_forward') {
+                    console.log('[Anti-Cache] Detected back/forward navigation, forcing reload...');
+                    window.location.reload();
+                }
+            }
+        });
+
+    </script>
     <script>
         // 主题管理
         function getTheme() {
@@ -425,6 +509,147 @@ function getPasswordPage(shareToken) {
             }
         });
     </script>
+</body>
+</html>`;
+}
+
+/**
+ * 生成 nginx 风格的错误页面
+ */
+function getErrorPage(statusCode, title, message) {
+    return `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${statusCode} ${title}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            color: #333;
+            padding: 20px;
+        }
+
+        .error-container {
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .error-code {
+            font-size: 120px;
+            font-weight: 300;
+            line-height: 1;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .error-message {
+            font-size: 24px;
+            font-weight: 400;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .error-message-en {
+            font-size: 16px;
+            color: #999;
+            margin-bottom: 30px;
+        }
+
+        .divider {
+            width: 100px;
+            height: 1px;
+            background: #ddd;
+            margin: 30px auto;
+        }
+
+        .footer {
+            font-size: 14px;
+            color: #999;
+            margin-top: 20px;
+        }
+
+        .footer a {
+            color: #666;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* 暗色模式支持 */
+        @media (prefers-color-scheme: dark) {
+            body {
+                background: #1a1a1a;
+                color: #e0e0e0;
+            }
+
+            .error-code {
+                color: #888;
+            }
+
+            .error-message {
+                color: #e0e0e0;
+            }
+
+            .error-message-en {
+                color: #666;
+            }
+
+            .divider {
+                background: #333;
+            }
+
+            .footer {
+                color: #666;
+            }
+
+            .footer a {
+                color: #888;
+            }
+        }
+
+        /* 移动端适配 */
+        @media (max-width: 768px) {
+            .error-code {
+                font-size: 80px;
+            }
+
+            .error-message {
+                font-size: 20px;
+            }
+
+            .error-message-en {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container">
+        <div class="error-code">${statusCode}</div>
+        <div class="error-message">${title}</div>
+        <div class="error-message-en">${message}</div>
+        <div class="divider"></div>
+        <div class="footer">
+            <a href="https://github.com/aydomini/pebble-drive" target="_blank">PebbleDrive</a>
+        </div>
+    </div>
 </body>
 </html>`;
 }

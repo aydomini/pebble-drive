@@ -1,0 +1,31 @@
+name = "pebble-drive-frontend"
+pages_build_output_dir = "dist"
+compatibility_date = "2024-01-01"
+
+# ===================================
+# Pages Functions 环境变量配置
+# ===================================
+#
+# ⚠️ 重要：本文件为配置示例，不包含真实敏感信息
+#
+# 部署步骤：
+# 1. 复制本文件为 wrangler.toml
+# 2. 修改 BACKEND_URL 为你的真实后端地址
+# 3. 确保 wrangler.toml 在 .gitignore 中（已配置）
+# 4. 从 frontend 目录运行：npx wrangler pages deploy dist --project-name=pebble-drive
+#
+# 或者在 Cloudflare Dashboard 中配置：
+# Settings → Environment Variables → Production
+#
+
+# 生产环境配置
+[env.production.vars]
+# 真实后端 API 地址（必须配置）
+# 示例：BACKEND_URL = "https://your-backend.workers.dev"
+# 你的配置：BACKEND_URL = "https://storage.aydoz.com"
+BACKEND_URL = "YOUR_BACKEND_URL_HERE"
+
+# 预览环境配置
+[env.preview.vars]
+# 预览环境也可以使用相同的后端，或者使用测试后端
+BACKEND_URL = "YOUR_BACKEND_URL_HERE"

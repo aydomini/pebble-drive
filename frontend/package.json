@@ -1,6 +1,6 @@
 {
   "name": "pebbledrive-frontend",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "description": "PebbleDrive 前端应用",
   "type": "module",
   "scripts": {
