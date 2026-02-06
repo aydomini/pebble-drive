@@ -2,7 +2,7 @@ name: Deploy PebbleDrive
 
 on:
   push:
-    branches: [ main ]  # 只有 main 分支部署 workers
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -37,11 +37,11 @@ jobs:
 
         # 2. 获取或创建 D1 数据库
         echo "🗄️ 检查 D1 数据库..."
-        DB_ID=$(npx wrangler d1 list | grep pebble-drive-db | awk '{print $2}' || echo "")
+        DB_ID=$(npx wrangler d1 list --remote | grep pebble-drive-db | awk '{print $2}' || echo "")
 
         if [ -z "$DB_ID" ]; then
           echo "⚠️ 未找到数据库 pebble-drive-db，正在创建..."
-          DB_ID=$(npx wrangler d1 create pebble-drive-db --json | jq -r '.database_id')
+          DB_ID=$(npx wrangler d1 create pebble-drive-db --remote --json | jq -r '.database_id')
           echo "✅ 数据库创建成功: $DB_ID"
         else
           echo "✅ 找到数据库 ID: $DB_ID"
@@ -56,12 +56,12 @@ jobs:
 
         # 3. 获取或创建 KV Namespace（用于速率限制）
         echo "🔑 检查 KV Namespace..."
-        KV_ID=$(npx wrangler kv namespace list | grep -E '"title":\s*"RATE_LIMIT"' | grep -v preview | jq -r '.id' || echo "")
-        KV_PREVIEW_ID=$(npx wrangler kv namespace list | grep -E '"title":\s*"RATE_LIMIT_preview"' | jq -r '.id' || echo "")
+        KV_ID=$(npx wrangler kv namespace list --remote | grep -E '"title":\s*"RATE_LIMIT"' | grep -v preview | jq -r '.id' || echo "")
+        KV_PREVIEW_ID=$(npx wrangler kv namespace list --remote | grep -E '"title":\s*"RATE_LIMIT_preview"' | jq -r '.id' || echo "")
 
         if [ -z "$KV_ID" ]; then
           echo "⚠️ 未找到 RATE_LIMIT KV，正在创建..."
-          KV_ID=$(npx wrangler kv namespace create RATE_LIMIT --json | jq -r '.id')
+          KV_ID=$(npx wrangler kv namespace create RATE_LIMIT --remote --json | jq -r '.id')
           echo "✅ KV Namespace 创建成功: $KV_ID"
         else
           echo "✅ 找到 KV ID: $KV_ID"
@@ -69,7 +69,7 @@ jobs:
 
         if [ -z "$KV_PREVIEW_ID" ]; then
           echo "⚠️ 未找到 RATE_LIMIT_preview KV，正在创建..."
-          KV_PREVIEW_ID=$(npx wrangler kv namespace create RATE_LIMIT --preview --json | jq -r '.id')
+          KV_PREVIEW_ID=$(npx wrangler kv namespace create RATE_LIMIT --preview --remote --json | jq -r '.id')
           echo "✅ KV Preview Namespace 创建成功: $KV_PREVIEW_ID"
         else
           echo "✅ 找到 KV Preview ID: $KV_PREVIEW_ID"
@@ -97,19 +97,17 @@ jobs:
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
     - name: Deploy Backend to Cloudflare Workers
-      run: |
-        cd backend
-        echo "🚀 部署后端到 Cloudflare Workers..."
-        npx wrangler deploy
-      env:
-        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      uses: cloudflare/wrangler-action@v3
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        workingDirectory: 'backend'
 
     - name: Initialize Database Schema
       run: |
         cd backend
         echo "🗃️ 初始化数据库表结构..."
-        npx wrangler d1 execute pebble-drive-db --file=./migrations/schema.sql || echo "⚠️ 数据库表已存在或初始化失败（可能已存在）"
+        npx wrangler d1 execute pebble-drive-db --remote --file=./migrations/schema.sql || echo "⚠️ 数据库表已存在或初始化失败（可能已存在）"
       env:
         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -236,16 +234,12 @@ jobs:
         fi
 
     - name: Deploy Frontend to Cloudflare Pages
-      run: |
-        cd frontend
-        echo "🚀 部署前端到 Cloudflare Pages..."
-        # 从环境变量获取项目名，默认为 pebble-drive
-        PROJECT_NAME="${PAGES_PROJECT_NAME:-pebble-drive}"
-        npx wrangler pages deploy dist --project-name=$PROJECT_NAME
-      env:
-        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        PAGES_PROJECT_NAME: ${{ secrets.PAGES_PROJECT_NAME }}
+      uses: cloudflare/wrangler-action@v3
+      with:
+        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        command: pages deploy dist --project-name=${{ secrets.PAGES_PROJECT_NAME || 'pebble-drive' }}
+        workingDirectory: 'frontend'
 
     - name: Deployment Complete
       run: |
