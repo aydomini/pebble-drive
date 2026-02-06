@@ -1,11 +1,24 @@
-# 本地开发环境变量示例
-# 复制此文件为 .dev.vars 并填入你的值
+# PebbleDrive 敏感配置示例
+#
+# 用途：
+# - 本地开发：复制此文件为 .dev.vars 并填入你的值
+# - Deploy with Workers：参考此文件配置生产环境 Secrets
+#
+# 部署后必须配置以下 Secrets：
+#
+# 1. 登录密码（必需）
+#    echo "your-secure-password" | npx wrangler secret put AUTH_PASSWORD
+#
+# 2. JWT 密钥（必需）
+#    openssl rand -base64 32 | npx wrangler secret put AUTH_TOKEN_SECRET
+#
+# 3. Turnstile 验证密钥（可选，用于防机器人）
+#    echo "your-turnstile-secret" | npx wrangler secret put TURNSTILE_SECRET_KEY
 
-# 登录密码（本地开发用）
-AUTH_PASSWORD=your-local-password
-
-# JWT 密钥（本地开发用）
-AUTH_TOKEN_SECRET=your-local-secret-key
+# 示例值（请勿在生产环境使用）
+AUTH_PASSWORD=changeme
+AUTH_TOKEN_SECRET=changeme-use-openssl-rand-base64-32-to-generate
+TURNSTILE_SECRET_KEY=optional-turnstile-secret
 
 # 注意：
 # - .dev.vars 文件已在 .gitignore 中，不会被提交

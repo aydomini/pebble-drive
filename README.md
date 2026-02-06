@@ -16,11 +16,11 @@
 
 - 🚀 **无服务器架构** - Cloudflare Workers 边缘计算，免费 10 万次请求/天
 - 📦 **三存储系统** - R2 (文件) + D1 (元数据) + KV (速率限制)
-- 📤 **智能上传** - 拖拽上传，最大 200MB，支持断点续传
+- 📤 **智能上传** - 拖拽上传，简单上传最大 200MB，分片上传最大 5GB
 - 🔗 **灵活分享** - 标准链接/短链接切换，密码保护，限时限次下载
 - 👁️ **文件预览** - 图片、PDF、Markdown、代码高亮、SVG
 - 🔐 **安全防护** - SHA-256 哈希、速率限制、Turnstile 人机验证
-- 🌍 **多语言** - 中文/英文/日文自适应
+- 🌍 **多语言** - 中文/英文自适应
 - 🌓 **主题切换** - 亮色/暗色模式
 - 📱 **响应式** - 完美适配桌面/平板/手机
 
@@ -44,6 +44,90 @@
 
 ## 🚀 快速开始
 
+### 方式 1：一键部署（Backend + Frontend）⭐ 最简单
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/aydomini/pebble-drive)
+
+**🎉 真正的一键部署！点击按钮后**：
+
+1. 登录 Cloudflare 账号
+2. 系统自动创建资源（D1、R2、KV）
+3. ✅ **自动构建并部署 Frontend**
+4. ✅ **自动部署 Backend API**
+5. ✅ **数据库自动初始化**
+6. ✅ **使用临时密码**：`TEMP_PASSWORD_CHANGE_ME`
+
+**访问地址**：`https://pebble-drive.{your-subdomain}.workers.dev`
+
+**架构说明**：
+
+- 📦 前后端合并部署到**单个 Worker**（使用 Workers Assets）
+- ✅ 统一域名（无跨域问题）
+- ✅ 代码仍然分离（frontend/ + backend/ 独立开发）
+- ✅ **防缓存逻辑已迁移**：从 Pages Functions 迁移到 Worker 中间件
+- ⚠️ 代码大小限制：1MB 压缩后（当前 ~700KB，充足）
+
+**🔧 技术细节**：
+
+防缓存机制（分享/下载核心功能）：
+- ✅ 时间戳重定向（`_t` 参数防止浏览器缓存）
+- ✅ 动态时间窗口（桌面1秒/移动3秒/弱网5秒）
+- ✅ 时钟偏差容忍（支持客户端时间不同步）
+- ✅ 强制 no-cache 头（确保下载次数限制生效）
+
+**⚠️ 重要：修改默认密码**（强烈推荐）
+
+应用已可用，但使用的是**临时密码**。请立即修改：
+
+1. **方式A：在 Cloudflare Dashboard 修改**（推荐）
+   - 访问：[Workers & Pages](https://dash.cloudflare.com/) → `pebble-drive-api` → Settings → Variables
+   - 修改 `AUTH_PASSWORD` 为你的安全密码
+   - 修改 `AUTH_TOKEN_SECRET` 为随机字符串（如：`openssl rand -base64 32` 生成）
+
+2. **方式B：使用 CLI 修改**（更安全）
+
+   ```bash
+   cd backend
+
+   # 覆盖为安全密码
+   echo "your-secure-password" | npx wrangler secret put AUTH_PASSWORD
+
+   # 覆盖为随机 JWT 密钥
+   openssl rand -base64 32 | npx wrangler secret put AUTH_TOKEN_SECRET
+
+   # 配置 Turnstile（可选）
+   echo "your-turnstile-secret" | npx wrangler secret put TURNSTILE_SECRET_KEY
+   ```
+
+---
+
+### 方式 2：GitHub Actions 一键部署 ⭐ 推荐新手
+
+[![Deploy with GitHub Actions](https://img.shields.io/badge/Deploy-GitHub%20Actions-2088FF?logo=github-actions&logoColor=white)](../../actions/workflows/deploy.yml)
+
+1. **Fork 本项目**到你的 GitHub 账号
+2. **配置 GitHub Secrets**（Settings → Secrets and variables → Actions）：
+   - `CLOUDFLARE_API_TOKEN`：[获取 API Token](https://dash.cloudflare.com/profile/api-tokens)
+   - `CLOUDFLARE_ACCOUNT_ID`：[查看 Account ID](https://dash.cloudflare.com/)
+   - `TURNSTILE_SITE_KEY`（可选）：[创建 Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
+
+3. **点击 Actions** → **Deploy PebbleDrive** → **Run workflow**
+   - 可选配置：文件大小限制、存储配额、上传限制、项目名称
+
+4. **配置登录密码**（在本地运行）：
+
+   ```bash
+   cd backend
+   echo "your-password" | npx wrangler secret put AUTH_PASSWORD
+   openssl rand -base64 32 | npx wrangler secret put AUTH_TOKEN_SECRET
+   ```
+
+🎉 完成！访问部署输出的 URL 即可使用。
+
+---
+
+### 方式 3：本地命令行部署
+
 ```bash
 # 1. 克隆项目
 git clone https://github.com/aydomini/pebble-drive.git
@@ -63,6 +147,22 @@ openssl rand -base64 32 | npx wrangler secret put AUTH_TOKEN_SECRET
 
 🎉 完成！访问输出的 URL 即可使用。
 
+---
+
+### 📊 部署模式对比
+
+| 特性 | 方式 1：一键部署 | 方式 2/3：分离部署 |
+|------|----------------|------------------|
+| **部署复杂度** | ⭐⭐⭐⭐⭐ 最简单 | ⭐⭐⭐ 需配置多项 |
+| **部署时间** | ~2分钟 | ~16分钟 |
+| **域名** | 单一域名 | 两个域名（需配置 BACKEND_URL） |
+| **防缓存实现** | Worker 中间件 | Pages Functions |
+| **适用场景** | 新手、快速部署 | 大型项目、团队协作 |
+
+**推荐**：90% 的用户适合使用**方式 1（一键部署）**
+
+---
+
 📚 **详细部署指南**：[DEPLOY.md](DEPLOY.md)
 
 ---
@@ -73,95 +173,6 @@ openssl rand -base64 32 | npx wrangler secret put AUTH_TOKEN_SECRET
 |------|------|
 | [DEPLOY.md](DEPLOY.md) | 完整部署指南（后端/前端/短链接配置） |
 | [CHANGELOG.md](CHANGELOG.md) | 版本更新日志 |
-
----
-
-## 💡 主要 API
-
-<details>
-<summary><b>点击查看 API 端点</b></summary>
-
-**认证**
-```http
-POST /api/login
-Body: { "password": "your-password" }
-```
-
-**文件操作**
-```http
-POST   /api/upload         # 上传文件
-GET    /api/files          # 文件列表
-GET    /api/download?id=x  # 下载文件
-DELETE /api/delete?id=x    # 删除文件
-```
-
-**分享**
-```http
-POST /api/share
-Body: {
-  "fileId": "xxx",
-  "password": "optional",     # 可选密码保护
-  "expiry": 3600,            # 可选有效期（秒）
-  "downloadLimit": 10        # 可选下载次数
-}
-
-GET  /share/:token           # 访问分享链接
-POST /share/:token/verify    # 密码验证
-```
-
-</details>
-
----
-
-## ❓ 常见问题
-
-<details>
-<summary><b>如何修改登录密码？</b></summary>
-
-```bash
-cd backend
-echo "new-password" | npx wrangler secret put AUTH_PASSWORD
-```
-立即生效，无需重新部署。
-</details>
-
-<details>
-<summary><b>如何配置自定义域名？</b></summary>
-
-在 Cloudflare Dashboard 中配置自定义域名后，重新构建前端：
-```bash
-cd frontend
-VITE_API_BASE_URL=https://your-backend-domain.com \
-VITE_TURNSTILE_SITE_KEY=your-site-key \
-npm run build
-
-npx wrangler pages deploy dist --project-name=pebble-drive
-```
-详见 [DEPLOY.md](DEPLOY.md)
-</details>
-
-<details>
-<summary><b>支持哪些文件预览？</b></summary>
-
-- **图片**：JPG, PNG, GIF, WebP, SVG
-- **文档**：PDF, Markdown
-- **代码**：JavaScript, Python, Java, Go, Rust, C/C++, JSON, YAML, SQL 等 40+ 种
-- **其他**：纯文本
-</details>
-
-<details>
-<summary><b>如何备份数据？</b></summary>
-
-```bash
-# 导出数据库
-wrangler d1 export pebble-drive-db --output=backup.sql
-
-# 查看 R2 文件
-wrangler r2 object list pebble-drive-storage
-```
-</details>
-
-更多问题参考 [DEPLOY.md](DEPLOY.md) 的"常见问题"章节。
 
 ---
 

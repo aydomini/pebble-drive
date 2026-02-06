@@ -47,6 +47,12 @@ export async function handleRoute(request, env) {
         return handleShareAccess(request, env, shareToken);
     }
 
+    // 处理下载访问（无需认证，与分享使用相同逻辑）
+    if (path.startsWith('/download/')) {
+        const shareToken = path.substring(10);
+        return handleShareAccess(request, env, shareToken);
+    }
+
     // 处理API路由
     const route = routes[path];
     if (route) {

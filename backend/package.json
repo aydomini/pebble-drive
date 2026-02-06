@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "dev:local": "wrangler dev --local",
+    "build": "npm run build:frontend",
+    "build:frontend": "cd ../frontend && npm install && npm run build",
     "deploy": "wrangler deploy",
+    "deploy:all": "npm run build && wrangler deploy",
     "tail": "wrangler tail",
     "db:init": "wrangler d1 execute pebble-drive-db --file=./migrations/schema.sql",
     "db:migrate": "wrangler d1 migrations apply pebble-drive-db --remote",
@@ -19,6 +22,6 @@
     "serverless"
   ],
   "devDependencies": {
-    "wrangler": "^3.0.0"
+    "wrangler": "^4.0.0"
   }
 }

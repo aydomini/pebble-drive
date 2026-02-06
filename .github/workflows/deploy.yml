@@ -4,6 +4,42 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      max_file_size:
+        description: 'Max file size (MB) for simple upload'
+        required: false
+        default: '200'
+        type: choice
+        options:
+          - '100'
+          - '200'
+          - '500'
+          - '1000'
+      storage_quota:
+        description: 'Storage quota (GB)'
+        required: false
+        default: '10'
+        type: choice
+        options:
+          - '10'
+          - '50'
+          - '100'
+          - '500'
+      upload_rate_limit:
+        description: 'Upload rate limit (per hour)'
+        required: false
+        default: '50'
+        type: choice
+        options:
+          - '20'
+          - '50'
+          - '100'
+          - '200'
+      pages_project_name:
+        description: 'Cloudflare Pages project name'
+        required: false
+        default: 'pebble-drive'
+        type: string
 
 jobs:
   deploy-backend:
@@ -88,6 +124,30 @@ jobs:
             s/id = \".*\"/id = \"$KV_ID\"/
             s/preview_id = \".*\"/preview_id = \"$KV_PREVIEW_ID\"/
           }" wrangler.toml
+        fi
+
+        # 4. 更新配置参数（如果通过 workflow_dispatch 手动触发）
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "🔧 应用用户自定义配置..."
+
+          MAX_FILE_SIZE="${{ github.event.inputs.max_file_size }}"
+          STORAGE_QUOTA="${{ github.event.inputs.storage_quota }}"
+          UPLOAD_LIMIT="${{ github.event.inputs.upload_rate_limit }}"
+
+          if [ -n "$MAX_FILE_SIZE" ]; then
+            sed -i "s/MAX_FILE_SIZE_MB = \".*\"/MAX_FILE_SIZE_MB = \"$MAX_FILE_SIZE\"/" wrangler.toml
+            echo "  ✓ MAX_FILE_SIZE_MB = $MAX_FILE_SIZE"
+          fi
+
+          if [ -n "$STORAGE_QUOTA" ]; then
+            sed -i "s/STORAGE_QUOTA_GB = \".*\"/STORAGE_QUOTA_GB = \"$STORAGE_QUOTA\"/" wrangler.toml
+            echo "  ✓ STORAGE_QUOTA_GB = $STORAGE_QUOTA"
+          fi
+
+          if [ -n "$UPLOAD_LIMIT" ]; then
+            sed -i "s/UPLOAD_RATE_LIMIT = \".*\"/UPLOAD_RATE_LIMIT = \"$UPLOAD_LIMIT\"/" wrangler.toml
+            echo "  ✓ UPLOAD_RATE_LIMIT = $UPLOAD_LIMIT"
+          fi
         fi
 
         echo "✅ 后端配置验证完成"
@@ -218,6 +278,75 @@ jobs:
           # 统计 .js 文件数量
           FUNCTIONS_COUNT=$(find dist/_functions -name "*.js" | wc -l | tr -d ' ')
           echo "✅ 找到 $FUNCTIONS_COUNT 个 Functions 文件"
+
+          # 🔴 增强验证：检查关键文件是否存在
+          echo ""
+          echo "🔍 验证关键 Functions 文件..."
+
+          MISSING_FILES=0
+
+          # 检查 API 代理函数
+          if [ ! -f "dist/_functions/api/[[path]].js" ]; then
+            echo "❌ 缺失关键文件：dist/_functions/api/[[path]].js"
+            MISSING_FILES=$((MISSING_FILES + 1))
+          else
+            FILE_SIZE=$(stat -c%s "dist/_functions/api/[[path]].js" 2>/dev/null || stat -f%z "dist/_functions/api/[[path]].js" 2>/dev/null)
+            if [ "$FILE_SIZE" -lt 100 ]; then
+              echo "❌ 文件过小（可能损坏）：dist/_functions/api/[[path]].js (${FILE_SIZE} bytes)"
+              MISSING_FILES=$((MISSING_FILES + 1))
+            else
+              echo "✅ API 代理函数存在 (${FILE_SIZE} bytes)"
+            fi
+          fi
+
+          # 检查分享链接代理函数
+          if [ ! -f "dist/_functions/share/[[token]].js" ]; then
+            echo "❌ 缺失关键文件：dist/_functions/share/[[token]].js"
+            MISSING_FILES=$((MISSING_FILES + 1))
+          else
+            FILE_SIZE=$(stat -c%s "dist/_functions/share/[[token]].js" 2>/dev/null || stat -f%z "dist/_functions/share/[[token]].js" 2>/dev/null)
+            if [ "$FILE_SIZE" -lt 100 ]; then
+              echo "❌ 文件过小（可能损坏）：dist/_functions/share/[[token]].js (${FILE_SIZE} bytes)"
+              MISSING_FILES=$((MISSING_FILES + 1))
+            else
+              echo "✅ 分享链接代理函数存在 (${FILE_SIZE} bytes)"
+            fi
+          fi
+
+          # 检查下载代理函数
+          if [ ! -f "dist/_functions/download/[[token]].js" ]; then
+            echo "❌ 缺失关键文件：dist/_functions/download/[[token]].js"
+            MISSING_FILES=$((MISSING_FILES + 1))
+          else
+            FILE_SIZE=$(stat -c%s "dist/_functions/download/[[token]].js" 2>/dev/null || stat -f%z "dist/_functions/download/[[token]].js" 2>/dev/null)
+            if [ "$FILE_SIZE" -lt 100 ]; then
+              echo "❌ 文件过小（可能损坏）：dist/_functions/download/[[token]].js (${FILE_SIZE} bytes)"
+              MISSING_FILES=$((MISSING_FILES + 1))
+            else
+              echo "✅ 下载代理函数存在 (${FILE_SIZE} bytes)"
+            fi
+          fi
+
+          # 验证结果
+          if [ "$MISSING_FILES" -gt 0 ]; then
+            echo ""
+            echo "❌❌❌ Functions 验证失败：$MISSING_FILES 个关键文件缺失或损坏"
+            echo ""
+            echo "⚠️ 这将导致严重的安全问题："
+            echo "   - 分享链接可以绕过下载次数限制"
+            echo "   - 过期链接依然可以访问"
+            echo "   - 密码保护失效"
+            echo "   - API 请求可能暴露后端地址"
+            echo ""
+            echo "🔧 解决方法："
+            echo "   1. 检查 frontend/functions/ 目录是否存在这些文件"
+            echo "   2. 检查构建步骤中的 'cp -r functions dist/_functions' 是否执行"
+            echo "   3. 检查文件路径是否正确（注意 [[path]] 和 [[token]] 语法）"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅✅✅ 所有关键 Functions 文件验证通过"
         else
           echo "❌ Pages Functions 目录不存在（dist/_functions）"
           echo "⚠️ 这将导致严重的安全问题："
@@ -238,7 +367,7 @@ jobs:
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        command: pages deploy dist --project-name=${{ secrets.PAGES_PROJECT_NAME || 'pebble-drive' }}
+        command: pages deploy dist --project-name=${{ github.event.inputs.pages_project_name || secrets.PAGES_PROJECT_NAME || 'pebble-drive' }}
         workingDirectory: 'frontend'
 
     - name: Deployment Complete

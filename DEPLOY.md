@@ -18,11 +18,52 @@
 
 ## ⚡ 快速开始（10分钟）
 
-### 前置要求
+### 🎯 部署方式选择
 
+**推荐新手**：GitHub Actions 一键部署（无需本地环境）
+**推荐开发者**：本地命令行部署（完全控制）
+
+---
+
+### 方式 1：GitHub Actions 一键部署 ⭐ 推荐
+
+**优点**：无需本地环境，图形化配置，自动化部署
+
+1. **Fork 本项目**到你的 GitHub 账号
+
+2. **配置 GitHub Secrets**（Settings → Secrets and variables → Actions）：
+   - `CLOUDFLARE_API_TOKEN`：[获取 Token](https://dash.cloudflare.com/profile/api-tokens)（需要 "Edit Cloudflare Workers" 权限）
+   - `CLOUDFLARE_ACCOUNT_ID`：[查看 Account ID](https://dash.cloudflare.com/)
+   - `TURNSTILE_SITE_KEY`（可选）：[创建 Turnstile](https://dash.cloudflare.com/?to=/:account/turnstile)
+
+3. **点击 Actions** → **Deploy PebbleDrive** → **Run workflow**
+   - 可配置：文件大小限制（100/200/500/1000 MB）
+   - 可配置：存储配额（10/50/100/500 GB）
+   - 可配置：上传限制（20/50/100/200 次/小时）
+   - 可配置：项目名称（默认 pebble-drive）
+
+4. **等待部署完成**（约 3-5 分钟）
+
+5. **配置登录密码**（在本地运行）：
+
+   ```bash
+   cd backend
+   echo "your-password" | npx wrangler secret put AUTH_PASSWORD
+   openssl rand -base64 32 | npx wrangler secret put AUTH_TOKEN_SECRET
+   ```
+
+**完成！** 访问 Actions 日志中的 URL 即可使用。
+
+---
+
+### 方式 2：本地命令行部署
+
+**前置要求**：
 - Node.js >= 14.x
 - Cloudflare 账号
 - Wrangler CLI
+
+**步骤**：
 
 ### 1. 登录 Cloudflare
 
@@ -55,8 +96,8 @@ echo "your-turnstile-secret" | npx wrangler secret put TURNSTILE_SECRET_KEY
 ```bash
 cd ../frontend
 
-# 设置环境变量并构建
-VITE_API_BASE_URL=https://your-backend-api.workers.dev \
+# ⚠️ 重要：VITE_API_BASE_URL 必须为空字符串（使用 Pages Functions 代理）
+VITE_API_BASE_URL='' \
 VITE_TURNSTILE_SITE_KEY=your-site-key \
 npm run build
 
@@ -66,6 +107,13 @@ cp -r functions dist/_functions
 # 部署到 Pages
 npx wrangler pages deploy dist --project-name=your-project-name
 ```
+
+**💡 为什么 VITE_API_BASE_URL 必须为空字符串？**
+
+- 前端通过 **Pages Functions** 代理所有 API 请求
+- 完全隐藏后端 Worker URL，提高安全性
+- 使用相对路径（如 `/api/files`）而非绝对路径
+- 详见"步骤2：部署前端"章节的完整说明
 
 **🚨 为什么必须复制 Functions？**
 ```
@@ -492,7 +540,7 @@ open https://your-frontend-domain.com
 | 变量名 | 说明 | 默认值 | 必需 |
 |-------|------|-------|------|
 | `STORAGE_QUOTA_GB` | 存储配额（GB） | 10 | 否 |
-| `MAX_FILE_SIZE_MB` | 单文件最大大小（MB） | 200 | 否 |
+| `MAX_FILE_SIZE_MB` | 简单上传单文件最大大小（MB），分片上传最大 5GB（R2 限制） | 200 | 否 |
 | `SHARE_DOMAIN` | 标准分享链接域名 | - | 是 |
 | `SHORT_DOMAIN` | 短链接域名 | - | 否 |
 | `BLOCKED_EXTENSIONS` | 禁止上传的文件类型 | .exe,.sh,... | 否 |
